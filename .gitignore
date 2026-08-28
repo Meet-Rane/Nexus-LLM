@@ -1,0 +1,27 @@
+# Python virtual environment
+rag-service/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node dependencies
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Environment variables / secrets
+.env
+.env.*
+frontend/.env
+rag-service/.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
