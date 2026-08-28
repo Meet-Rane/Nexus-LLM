@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@theme {
+  /* Palette — industrial control-room, not default AI purple/violet */
+  --color-base: #14171c;
+  --color-surface: #1b2028;
+  --color-surface2: #232a34;
+  --color-edge: #2e3742;
+  --color-ink: #e8eaed;
+  --color-ink2: #8b93a1;
+  --color-ink3: #5b6472;
+
+  --color-amber: #e8a33d;
+  --color-amber-dim: #b9822f;
+  --color-amber-soft: #3a2e19;
+
+  --color-steel: #3d6b8c;
+  --color-steel-dim: #2c4f66;
+  --color-steel-soft: #1b2c36;
+
+  --color-ok: #4a9b6e;
+  --color-danger: #c4544a;
+
+  /* Type */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Motion */
+  --animate-fadeInUp: fadeInUp 0.25s ease-out;
+  --animate-pulseDot: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-base text-ink font-sans antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
