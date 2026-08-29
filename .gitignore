@@ -25,3 +25,5 @@ rag-service/.env
 # OS
 .DS_Store
 Thumbs.db
+
+local.properties
