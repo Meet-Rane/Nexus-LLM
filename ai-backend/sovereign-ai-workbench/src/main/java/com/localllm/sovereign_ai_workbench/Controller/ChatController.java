@@ -3,6 +3,7 @@ package com.localllm.sovereign_ai_workbench.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import com.localllm.sovereign_ai_workbench.Service.AgentService;
+import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionService;
 
 
 @RestController
@@ -10,11 +11,14 @@ import com.localllm.sovereign_ai_workbench.Service.AgentService;
 public class ChatController {
 
     private final AgentService agentService;
+    private final CodeExecutionService codeExecutionService;
 
     public ChatController(
-        AgentService agentService
+        AgentService agentService,
+        CodeExecutionService codeExecutionService
     ){
         this.agentService= agentService;
+        this.codeExecutionService = codeExecutionService;
     }
 
     @GetMapping("/chat")
