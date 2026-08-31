@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 public class ModelRouter {
 
     public static final String CODING_MODEL =
-            "deepseek-ai/deepseek-v4-pro-0813";
+            "nvidia/nemotron-3-ultra-550b-a55b";
 
     public static final String GENERAL_MODEL =
             "nvidia/nemotron-3-ultra-550b-a55b";

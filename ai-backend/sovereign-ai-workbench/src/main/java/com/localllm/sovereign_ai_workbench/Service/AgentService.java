@@ -7,21 +7,25 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import com.localllm.sovereign_ai_workbench.Router.ModelRouter;
+import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionTool;
 
 @Service
 public class AgentService {
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
     private final ModelRouter modelRouter;
+    private final CodeExecutionTool codeExecutionTool;
 
     public AgentService(
         @Qualifier("chatClient") ChatClient chatClient,
         ChatMemory chatMemory,
-        ModelRouter modelRouter
+        ModelRouter modelRouter,
+        CodeExecutionTool codeExecutionTool
     ){
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.modelRouter = modelRouter;
+        this.codeExecutionTool = codeExecutionTool;
     }
 
 
@@ -37,6 +41,7 @@ public class AgentService {
                     OpenAiChatOptions.builder()
                         .model(selectedModel)
                 )
+                .tools(codeExecutionTool)
                 .user(message)
                 .call()
                 .content();

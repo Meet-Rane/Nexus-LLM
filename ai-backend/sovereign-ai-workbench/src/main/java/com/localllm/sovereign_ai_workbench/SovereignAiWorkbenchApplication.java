@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 public class SovereignAiWorkbenchApplication {
-
+ 
 	public static void main(String[] args) {
 		SpringApplication.run(SovereignAiWorkbenchApplication.class, args);
 	}
