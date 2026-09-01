@@ -9,10 +9,10 @@ import org.springframework.stereotype.Service;
 public class ModelRouter {
 
     public static final String CODING_MODEL =
-            "nvidia/nemotron-3-ultra-550b-a55b";
+            "llama3.1:8b";
 
     public static final String GENERAL_MODEL =
-            "nvidia/nemotron-3-ultra-550b-a55b";
+            "llama3.1:8b";
 
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;

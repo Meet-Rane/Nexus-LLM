@@ -6,6 +6,8 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,7 +24,7 @@ public class ChatConfig {
 
     @Bean
     public ChatClient chatClient(
-            OpenAiChatModel chatModel,
+            @Qualifier("ollamaChatModel")  ChatModel chatModel,
             ChatMemory chatMemory) {
 
         return ChatClient.builder(chatModel)

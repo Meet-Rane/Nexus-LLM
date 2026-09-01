@@ -1,10 +1,17 @@
 package com.localllm.sovereign_ai_workbench.Controller;
 
-import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.localllm.sovereign_ai_workbench.Service.AgentService;
 import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionService;
-
 
 @RestController
 @RequestMapping("/ai")
@@ -32,6 +39,15 @@ public class ChatController {
     @GetMapping("/health")
     public String getHealth(){
         return "Healthy";
+    }
+
+    @GetMapping("/history/{conversationId}")
+    public ResponseEntity<List<Message>> getChatHistory(
+            @PathVariable String conversationId) {
+
+        return ResponseEntity.ok(
+                agentService.getChatHistory(conversationId)
+        );
     }
 
 }

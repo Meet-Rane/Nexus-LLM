@@ -1,8 +1,13 @@
 package com.localllm.sovereign_ai_workbench.Service;
 
+import java.util.List;
+
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.openai.OpenAiChatOptions;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +33,9 @@ public class AgentService {
         this.codeExecutionTool = codeExecutionTool;
     }
 
+    public List<Message> getChatHistory(String conversationId) {
+        return chatMemory.get(conversationId);
+    }
 
     public String chat(String conversationId, String message){
 
@@ -38,7 +46,7 @@ public class AgentService {
                 .advisors(advisor -> advisor
                         .param(chatMemory.CONVERSATION_ID, conversationId))
                 .options(
-                    OpenAiChatOptions.builder()
+                    OllamaChatOptions.builder()
                         .model(selectedModel)
                 )
                 .tools(codeExecutionTool)
