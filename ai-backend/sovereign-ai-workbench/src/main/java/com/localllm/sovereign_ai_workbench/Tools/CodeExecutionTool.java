@@ -1,5 +1,7 @@
 package com.localllm.sovereign_ai_workbench.Tools;
 
+import com.localllm.sovereign_ai_workbench.Config.ConversationContextHolder;
+import com.localllm.sovereign_ai_workbench.Dto.AgentStreamEvent;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
@@ -18,17 +20,16 @@ public class CodeExecutionTool {
         description = """
             Execute Python code inside a secure isolated Docker sandbox.
 
-            Use this tool when you need to:
-            - run Python code
-            - perform calculations
-            - test or verify generated code
-            - analyze data using Python
-            - generate files programmatically
+            Pre-installed libraries in sandbox:
+            - fpdf2 (PDF generation: use pdf.cell(0, 10, text, new_x='LMARGIN', new_y='NEXT') or pdf.write(8, text), output to 'output/filename.pdf')
+            - reportlab (PDF generation: SimpleDocTemplate('output/filename.pdf'))
+            - python-docx (Word documents)
+            - openpyxl (Excel spreadsheets)
+            - pandas, pillow
 
-            The sandbox has no internet access and is resource limited.
-
-            The tool accepts multiple files and an entry file.
-            Generated files should be written inside /sandbox/output/.
+            CRITICAL RULES FOR CALLING THIS TOOL:
+            1. All generated files MUST be saved into the 'output/' directory (e.g. 'output/spring_ai_guide.pdf').
+            2. ALWAYS provide the Python code inside the 'files' map (e.g. key: 'generate_pdf.py', value: '...python code...') AND set 'entryFile': 'generate_pdf.py'.
             """
     )
     public CodeExecutionResult executePythonCode(
@@ -36,15 +37,32 @@ public class CodeExecutionTool {
 
         System.out.println("========== TOOL CALLED ==========");
         System.out.println("Entry file: " + request.getEntryFile());
-        System.out.println("Files: " + request.getFiles().keySet());
+        if (request.getFiles() != null) {
+            System.out.println("Files: " + request.getFiles().keySet());
+        }
 
-        CodeExecutionResult result =
-            codeExecutionService.execute(request);
+        ConversationContextHolder.emitEvent(AgentStreamEvent.toolStart(
+            "execute_python_code", 
+            "Executing Python script '" + request.getEntryFile() + "' in Docker sandbox"
+        ));
 
-        System.out.println("========== TOOL FINISHED ==========");
-        System.out.println("Exit code: " + result.getExitCode());
-        System.out.println("Artifacts: " + result.getArtifacts());
+        try {
+            CodeExecutionResult result = codeExecutionService.execute(request);
 
-        return result;
+            System.out.println("========== TOOL FINISHED ==========");
+            System.out.println("Exit code: " + result.getExitCode());
+            System.out.println("Artifacts: " + result.getArtifacts());
+
+            String completionMsg = "Execution finished with exit code " + result.getExitCode() + 
+                                   (result.getArtifacts() != null && !result.getArtifacts().isEmpty() ? 
+                                    ". Created artifacts: " + result.getArtifacts() : "");
+
+            ConversationContextHolder.emitEvent(AgentStreamEvent.toolComplete("execute_python_code", completionMsg));
+
+            return result;
+        } catch (Exception e) {
+            ConversationContextHolder.emitEvent(AgentStreamEvent.toolComplete("execute_python_code", "Execution failed: " + e.getMessage()));
+            throw e;
+        }
     }
 }

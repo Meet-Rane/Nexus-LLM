@@ -1,5 +1,6 @@
 package com.localllm.sovereign_ai_workbench.Tools;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 
 public class CodeExecutionRequest {
@@ -9,6 +10,20 @@ public class CodeExecutionRequest {
     private String entryFile;
 
     public CodeExecutionRequest() {
+    }
+
+    // String constructor to handle LLM models that pass tool call arguments as a JSON string
+    public CodeExecutionRequest(String jsonString) {
+        if (jsonString != null && jsonString.trim().startsWith("{")) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                CodeExecutionRequest parsed = mapper.readValue(jsonString, CodeExecutionRequest.class);
+                this.language = parsed.language;
+                this.files = parsed.files;
+                this.entryFile = parsed.entryFile;
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     public CodeExecutionRequest(

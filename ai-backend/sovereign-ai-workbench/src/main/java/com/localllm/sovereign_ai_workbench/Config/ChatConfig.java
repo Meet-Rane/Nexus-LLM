@@ -5,20 +5,21 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.openai.http.okhttp.OpenAiHttpClientBuilderCustomizer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import org.springframework.beans.factory.annotation.Value;
+import java.time.Duration;
 
 @Configuration
 public class ChatConfig {
 
     @Value("${ai.provider}")
     private String provider;
-    
+
     @Bean
     public ChatMemory chatMemory(ChatMemoryRepository chatMemoryRepository){
         return MessageWindowChatMemory.builder()
@@ -28,25 +29,23 @@ public class ChatConfig {
     }
 
     @Bean
+    public OpenAiHttpClientBuilderCustomizer openAiHttpClientBuilderCustomizer() {
+        return builder -> builder.timeout(Duration.ofSeconds(300));
+    }
+
+    @Bean
     public ChatClient chatClient(
             @Qualifier("ollamaChatModel") ChatModel ollamaChatModel,
-
             @Qualifier("openAiChatModel") ChatModel openAiChatModel,
-
             ChatMemory chatMemory) {
 
         ChatModel selectedChatModel;
 
         if ("ollama".equalsIgnoreCase(provider)) {
-
             selectedChatModel = ollamaChatModel;
-
         } else if ("nvidia".equalsIgnoreCase(provider)) {
-
             selectedChatModel = openAiChatModel;
-
         } else {
-
             throw new IllegalArgumentException(
                     "Unsupported AI provider: " + provider
             );
