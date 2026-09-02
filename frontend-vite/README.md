@@ -1,16 +1,47 @@
-# React + Vite
+# Nexus Sovereign AI Workbench — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Responsive React interface for the on-premise agentic AI workbench. The UI is intentionally self-contained: it uses system fonts and local assets, so loading the frontend does not require calls to a font CDN or any other external service.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+The development server starts at `http://localhost:3000`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local service configuration
 
-## Expanding the ESLint configuration
+Create a `.env.local` file when the services use non-default addresses:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```env
+VITE_AGENT_URL=http://localhost:8080
+VITE_RAG_URL=http://localhost:8001
+```
+
+The frontend expects:
+
+- Agent API: `GET /health`, `POST /chat`
+- RAG API: `GET /ingest/status`, `POST /ingest/file`
+- Chat response: `{ "text": "...", "model_used": "...", "download_url": "..." }`
+- Ingest response: `{ "source": "...", "chunks_stored": 10, "total_collection_size": 120 }`
+
+## Product surfaces
+
+- **Workbench** — multimodal task entry, agent responses, model routing and live execution trace
+- **Documents** — local confidential file library and import flow
+- **Knowledge** — collections, index health and retrieval testing
+- **Agent runs** — auditable plans, tool events and execution history
+- **Model registry** — open-weight model status and routing policy
+- **Artifacts** — generated DOCX, PPTX, XLSX and code deliverables
+- **Sovereignty** — network egress evidence, controls and audit logs
+
+The operational data shown in non-chat screens is representative UI data until the corresponding telemetry endpoints are connected. Do not use placeholder monitor entries as the final air-gap proof; wire the security view to the host firewall or packet-capture service for the SIH demonstration.
+
+## Verification
+
+```bash
+npm run lint
+npm run build
+```

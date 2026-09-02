@@ -1,46 +1,23 @@
-import React from "react";
+import { Activity, ChevronDown, LockKeyhole, ShieldCheck } from "lucide-react";
 
-/**
- * A header styled like an equipment nameplate — the signature element of this
- * design. Reinforces that this is a sovereign, on-premise, air-gapped agent,
- * not a generic hosted chatbot.
- */
-export function StatusBar({ connected, model = "—", instanceId = "MRPL-WBX-01" }) {
+export function StatusBar({ connected = true, model = "Auto route", title = "Agent workbench", eyebrow = "Workspace / Active task", children }) {
   return (
-    <header className="flex items-center justify-between border-b border-edge bg-surface px-5 py-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-edge bg-surface2 font-display text-sm font-semibold text-amber">
-          ⌁
-        </div>
-        <div className="leading-tight">
-          <div className="font-display text-sm font-semibold tracking-wide text-ink">
-            Agentic AI Workbench
-          </div>
-          <div className="font-mono text-[11px] text-ink3">{instanceId}</div>
-        </div>
+    <header className="topbar">
+      <div className="min-w-0">
+        <p className="mb-1 truncate text-[10px] font-semibold uppercase tracking-[0.15em] text-muted">{eyebrow}</p>
+        <h1 className="truncate font-display text-lg font-semibold tracking-tight text-white">{title}</h1>
       </div>
-
-      <div className="flex items-center gap-4">
-        <div className="hidden items-center gap-1.5 rounded-full border border-edge bg-surface2 px-2.5 py-1 font-mono text-[11px] text-ink2 sm:flex">
-          <span>model</span>
-          <span className="text-ink">{model}</span>
-        </div>
-
-        <div
-          className={`flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[11px] ${
-            connected
-              ? "border-ok/40 bg-ok/10 text-ok"
-              : "border-danger/40 bg-danger/10 text-danger"
-          }`}
-        >
-          <span className="relative flex h-2 w-2">
-            <span
-              className={`absolute inline-flex h-full w-full rounded-full ${
-                connected ? "bg-ok" : "bg-danger"
-              } animate-pulseDot`}
-            />
-          </span>
-          {connected ? "ON-PREM · CONNECTED" : "OFFLINE"}
+      <div className="flex items-center gap-2.5">
+        {children}
+        <button className="hidden h-9 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-xs text-text transition hover:border-line-bright md:flex">
+          <Activity size={14} className="text-accent" />
+          <span>{model}</span>
+          <ChevronDown size={13} className="text-muted" />
+        </button>
+        <div className={`status-pill ${connected ? "status-online" : "status-offline"}`}>
+          {connected ? <ShieldCheck size={13} /> : <LockKeyhole size={13} />}
+          <span className="hidden sm:inline">{connected ? "LOCAL · SECURE" : "AGENT OFFLINE"}</span>
+          <span className="sm:hidden">{connected ? "LOCAL" : "OFFLINE"}</span>
         </div>
       </div>
     </header>

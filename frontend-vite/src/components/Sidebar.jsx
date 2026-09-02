@@ -1,204 +1,142 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
-  MessageSquare,
-  Files,
-  Database,
   Bot,
+  ChevronsLeft,
+  ChevronsRight,
+  CircleUserRound,
   Cpu,
-  FolderOpen,
-  ShieldCheck,
-  Settings,
+  Database,
+  FileOutput,
+  Files,
+  MessageSquareText,
   Plus,
-  PanelLeftClose,
-  PanelLeftOpen,
+  Settings,
+  ShieldCheck,
 } from "lucide-react";
 
-const mainItems = [
+const sections = [
   {
-    label: "Chat",
-    icon: MessageSquare,
-    path: "/",
+    label: "Workspace",
+    items: [
+      { label: "Workbench", icon: MessageSquareText, path: "/" },
+      { label: "Documents", icon: Files, path: "/documents", count: 12 },
+      { label: "Knowledge", icon: Database, path: "/knowledge" },
+    ],
   },
   {
-    label: "Documents",
-    icon: Files,
-    path: "/documents",
+    label: "Orchestration",
+    items: [
+      { label: "Agent runs", icon: Bot, path: "/agents", count: 1 },
+      { label: "Model registry", icon: Cpu, path: "/models" },
+      { label: "Artifacts", icon: FileOutput, path: "/artifacts", count: 8 },
+    ],
   },
   {
-    label: "Knowledge Base",
-    icon: Database,
-    path: "/knowledge",
-  },
-];
-
-const aiItems = [
-  {
-    label: "Agents",
-    icon: Bot,
-    path: "/agents",
-  },
-  {
-    label: "Models",
-    icon: Cpu,
-    path: "/models",
+    label: "Governance",
+    items: [{ label: "Sovereignty", icon: ShieldCheck, path: "/security" }],
   },
 ];
 
-const outputItems = [
-  {
-    label: "Artifacts",
-    icon: FolderOpen,
-    path: "/artifacts",
-  },
-];
-
-const securityItems = [
-  {
-    label: "Security",
-    icon: ShieldCheck,
-    path: "/security",
-  },
-];
+function NexusMark({ small = false }) {
+  return (
+    <div className={`nexus-mark ${small ? "h-8 w-8" : "h-9 w-9"}`} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
 
 function SidebarItem({ item, collapsed }) {
   const Icon = item.icon;
-
   return (
     <NavLink
       to={item.path}
       end={item.path === "/"}
       title={collapsed ? item.label : undefined}
-      className={({ isActive }) =>
-        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
-          isActive
-            ? "bg-amber/10 text-amber shadow-sm"
-            : "text-ink2 hover:bg-surface2 hover:text-ink"
-        } ${collapsed ? "justify-center" : ""}`
-      }
+      className={({ isActive }) => `nav-item ${isActive ? "nav-item-active" : ""} ${collapsed ? "justify-center" : ""}`}
     >
-      {({ isActive }) => (
+      <Icon size={18} strokeWidth={1.8} className="shrink-0" />
+      {!collapsed && (
         <>
-          <Icon
-            size={18}
-            strokeWidth={isActive ? 2.2 : 1.8}
-            className="shrink-0"
-          />
-
-          {!collapsed && <span className="truncate">{item.label}</span>}
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          {item.count && <span className="nav-count">{item.count}</span>}
         </>
       )}
     </NavLink>
   );
 }
 
-function Section({ title, items, collapsed }) {
-  return (
-    <div className="mb-5">
-      {!collapsed && (
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink3">
-          {title}
-        </p>
-      )}
-
-      <div className="space-y-1">
-        {items.map((item) => (
-          <SidebarItem key={item.path} item={item} collapsed={collapsed} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function Sidebar({ collapsed, setCollapsed }) {
+  const navigate = useNavigate();
+
+  const newTask = () => {
+    navigate("/", { state: { newTask: Date.now() } });
+  };
+
   return (
-    <aside
-      className={`relative flex h-screen shrink-0 flex-col border-r border-edge bg-surface transition-all duration-300 ${
-        collapsed ? "w-[72px]" : "w-[250px]"
-      }`}
-    >
-      {/* Header */}
-      <div
-        className={`flex h-[72px] items-center border-b border-edge px-4 ${
-          collapsed ? "justify-center" : "justify-between"
-        }`}
-      >
+    <aside className={`sidebar ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <div className={`flex h-[74px] items-center border-b border-line px-4 ${collapsed ? "justify-center" : "gap-3"}`}>
+        <NexusMark />
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge bg-surface2">
-              <span className="font-display text-lg text-amber">⌁</span>
-            </div>
-
-            <div>
-              <h1 className="font-display text-sm font-semibold text-ink">
-                Sovereign
-              </h1>
-              <p className="text-[10px] text-ink3">AI Workbench</p>
-            </div>
-          </div>
-        )}
-
-        {collapsed && (
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-edge bg-surface2">
-            <span className="font-display text-lg text-amber">⌁</span>
+          <div className="min-w-0">
+            <div className="font-display text-[15px] font-bold tracking-[0.08em] text-white">NEXUS</div>
+            <div className="text-[10px] font-medium uppercase tracking-[0.17em] text-muted">Sovereign AI</div>
           </div>
         )}
       </div>
 
-      {/* New Task */}
-      <div className="px-3 pt-4 pb-3">
-        <button
-          className={`flex w-full items-center gap-2 rounded-xl border border-edge bg-surface2 px-3 py-2.5 text-sm font-medium text-ink transition hover:border-amber/40 hover:bg-amber/5 ${
-            collapsed ? "justify-center" : ""
-          }`}
-          title={collapsed ? "New Task" : undefined}
-        >
-          <Plus size={17} />
-
-          {!collapsed && <span>New Task</span>}
+      <div className="px-3 py-4">
+        <button onClick={newTask} className={`new-task-button ${collapsed ? "justify-center px-0" : ""}`} title="Start a new task">
+          <Plus size={17} strokeWidth={2.2} />
+          {!collapsed && <span>New agent task</span>}
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
-        <Section title="Workspace" items={mainItems} collapsed={collapsed} />
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        {sections.map((section) => (
+          <section key={section.label} className="mb-5">
+            {!collapsed && <p className="section-label">{section.label}</p>}
+            <div className="space-y-1">
+              {section.items.map((item) => <SidebarItem key={item.path} item={item} collapsed={collapsed} />)}
+            </div>
+          </section>
+        ))}
 
-        <Section title="AI" items={aiItems} collapsed={collapsed} />
-
-        <Section title="Outputs" items={outputItems} collapsed={collapsed} />
-
-        <Section title="Security" items={securityItems} collapsed={collapsed} />
+        {!collapsed && (
+          <div className="mx-1 mt-5 rounded-xl border border-teal/20 bg-teal/[0.055] p-3.5">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-teal">
+              <ShieldCheck size={14} /> Air-gap enforced
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted">All inference and document processing stays on this machine.</p>
+            <NavLink to="/security" className="mt-3 inline-flex text-[11px] font-semibold text-text transition hover:text-white">
+              View network proof →
+            </NavLink>
+          </div>
+        )}
       </nav>
 
-      {/* Bottom */}
-      <div className="border-t border-edge p-3">
-        <button
-          className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink2 transition hover:bg-surface2 hover:text-ink ${
-            collapsed ? "justify-center" : ""
-          }`}
-          title={collapsed ? "Settings" : undefined}
-        >
-          <Settings size={18} strokeWidth={1.8} />
-
-          {!collapsed && <span>Settings</span>}
-        </button>
-
+      <div className="border-t border-line p-3">
+        {!collapsed && (
+          <div className="mb-2 flex items-center gap-3 rounded-xl px-2 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-panel-2 text-muted"><CircleUserRound size={17} /></div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-text">Local operator</p>
+              <p className="truncate font-mono text-[9px] text-muted">MRPL-WBX-01</p>
+            </div>
+            <Settings size={15} className="text-muted" />
+          </div>
+        )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink3 transition hover:bg-surface2 hover:text-ink ${
-            collapsed ? "justify-center" : ""
-          }`}
+          className={`nav-item w-full ${collapsed ? "justify-center" : ""}`}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? (
-            <PanelLeftOpen size={18} />
-          ) : (
-            <>
-              <PanelLeftClose size={18} />
-              <span>Collapse</span>
-            </>
-          )}
+          {collapsed ? <ChevronsRight size={18} /> : <><ChevronsLeft size={18} /><span>Collapse sidebar</span></>}
         </button>
       </div>
     </aside>
   );
 }
+
+export { NexusMark };
