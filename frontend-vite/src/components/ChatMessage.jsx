@@ -1,56 +1,43 @@
-import React from "react";
-import { AGENT_URL } from "../api/client";
+import { Bot, Check, Download, UserRound } from "lucide-react";
+import { getArtifactDownloadUrl } from "../api/client";
+import { Badge } from "./Ui";
 
 export function ChatMessage({ message }) {
   const isUser = message.role === "user";
-
+  const downloadUrl = message.artifact
+    ? getArtifactDownloadUrl(message.artifact.path, message.artifact.conversationId)
+    : null;
   return (
-    <div
-      className={`flex animate-fadeInUp ${isUser ? "justify-end" : "justify-start"}`}
-    >
-      <div className={`flex max-w-[75%] gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
-        {/* Role marker */}
-        <div
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-medium ${
-            isUser
-              ? "bg-steel/20 text-steel"
-              : "border border-edge bg-surface2 text-amber"
-          }`}
-        >
-          {isUser ? "YOU" : "AI"}
+    <article className={`message ${isUser ? "message-user" : ""}`}>
+      <div className={`message-avatar ${isUser ? "message-avatar-user" : "message-avatar-agent"}`}>
+        {isUser ? <UserRound size={14} /> : <Bot size={15} />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-white">{isUser ? "You" : "Nexus Agent"}</span>
+          {!isUser && message.model_used && <Badge tone="accent">{message.model_used}</Badge>}
         </div>
-
-        <div
-          className={`rounded-2xl px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
-            isUser
-              ? "rounded-tr-sm bg-steel text-white"
-              : "rounded-tl-sm border border-edge bg-surface2 text-ink"
-          }`}
-        >
-          <p className="whitespace-pre-wrap break-words">{message.text}</p>
-
-          {/* Model badge — assistant messages only */}
-          {!isUser && message.model_used && (
-            <span className="mt-2.5 inline-flex items-center rounded-full border border-edge bg-base px-2 py-0.5 font-mono text-[10px] text-ink3">
-              {message.model_used}
-            </span>
-          )}
-
-          {/* Download link — if the agent produced a file */}
-          {!isUser && message.download_url && (
-            <div className="mt-3">
-              <a
-                href={`${AGENT_URL}${message.download_url}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-ok px-3.5 py-1.5 text-[13px] font-semibold text-white transition hover:brightness-110"
-              >
-                ⬇ Download document
-              </a>
+        <div className={`message-body ${isUser ? "message-body-user" : ""}`}>
+          {!isUser && message.trace?.length > 0 && (
+            <div className="mb-3 space-y-1.5 border-b border-line pb-3">
+              {message.trace.map((event, index) => (
+                <div key={`${event.type}-${index}`} className="flex items-start gap-2 font-mono text-[10px] text-muted">
+                  <span className={event.type === "TOOL_COMPLETE" ? "text-teal" : "text-accent"}>{event.type === "TOOL_COMPLETE" ? "✓" : "›"}</span>
+                  <span><strong className="font-medium text-text">{event.label}</strong>{event.detail ? ` · ${event.detail}` : ""}</span>
+                </div>
+              ))}
             </div>
+          )}
+          <p className="whitespace-pre-wrap break-words">{message.text || "Waiting for the local agent…"}</p>
+          {!isUser && downloadUrl && (
+            <a href={downloadUrl} className="artifact-link">
+              <span className="icon-box icon-box-teal h-8 w-8"><Download size={15} /></span>
+              <span><strong>{message.artifact.fileName}</strong><small>Generated locally · ready to download</small></span>
+              <Check size={14} className="ml-auto text-teal" />
+            </a>
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

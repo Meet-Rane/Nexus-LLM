@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.localllm.sovereign_ai_workbench.Service.NetworkAuditService;
+
 @Service
 public class ModelRouter {
 
@@ -13,17 +15,29 @@ public class ModelRouter {
     private final String generalModel;
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
+    private final NetworkAuditService networkAuditService;
+    private final String provider;
+    private final String ollamaBaseUrl;
+    private final String externalAiBaseUrl;
 
     public ModelRouter(
         @Qualifier("routerClient") ChatClient chatClient,
         ChatMemory chatMemory,
+        NetworkAuditService networkAuditService,
         @Value("${ai.coding.model:meta/llama-3.3-70b-instruct}") String codingModel,
-        @Value("${ai.general.model:meta/llama-3.3-70b-instruct}") String generalModel
+        @Value("${ai.general.model:meta/llama-3.3-70b-instruct}") String generalModel,
+        @Value("${ai.provider}") String provider,
+        @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl,
+        @Value("${spring.ai.openai.base-url}") String externalAiBaseUrl
     ){
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
+        this.networkAuditService = networkAuditService;
         this.codingModel = codingModel;
         this.generalModel = generalModel;
+        this.provider = provider;
+        this.ollamaBaseUrl = ollamaBaseUrl;
+        this.externalAiBaseUrl = externalAiBaseUrl;
     }
 
     private String getConversationHistory(String conversationId) {
@@ -71,6 +85,9 @@ public class ModelRouter {
 
                     Return ONLY one word: CODING or GENERAL.
                     """.formatted(conversationHistory, message);
+
+            String endpoint = "ollama".equalsIgnoreCase(provider) ? ollamaBaseUrl : externalAiBaseUrl;
+            networkAuditService.record("ROUTER", endpoint, "classify task");
 
             String decision = chatClient.prompt()
                     .user(systemMessage)

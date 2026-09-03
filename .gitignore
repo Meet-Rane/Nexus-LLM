@@ -11,6 +11,9 @@ frontend/node_modules/
 # Build output
 frontend/dist/
 frontend/build/
+.m2-repository/
+ai-backend/sovereign-ai-workbench/storage/
+rag-service/.runtime/
 
 # Environment variables / secrets
 .env

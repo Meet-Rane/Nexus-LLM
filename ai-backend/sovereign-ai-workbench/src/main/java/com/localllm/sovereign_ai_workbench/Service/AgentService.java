@@ -20,6 +20,7 @@ import com.localllm.sovereign_ai_workbench.Tools.CreateFileTool;
 import com.localllm.sovereign_ai_workbench.Tools.ReadFileTool;
 import com.localllm.sovereign_ai_workbench.Tools.WriteFileTool;
 import com.localllm.sovereign_ai_workbench.Tools.ListFilesTool;
+import com.localllm.sovereign_ai_workbench.Tools.KnowledgeSearchTool;
 
 @Service
 public class AgentService {
@@ -32,7 +33,11 @@ public class AgentService {
     private final ReadFileTool readFileTool;
     private final WriteFileTool writeFileTool;
     private final ListFilesTool listFilesTool;
+    private final KnowledgeSearchTool knowledgeSearchTool;
+    private final NetworkAuditService networkAuditService;
     private final String provider;
+    private final String ollamaBaseUrl;
+    private final String externalAiBaseUrl;
 
     public AgentService(
             @Qualifier("chatClient") ChatClient chatClient,
@@ -43,7 +48,11 @@ public class AgentService {
             ReadFileTool readFileTool,
             WriteFileTool writeFileTool,
             ListFilesTool listFilesTool,
-            @Value("${ai.provider}") String provider
+            KnowledgeSearchTool knowledgeSearchTool,
+            NetworkAuditService networkAuditService,
+            @Value("${ai.provider}") String provider,
+            @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl,
+            @Value("${spring.ai.openai.base-url}") String externalAiBaseUrl
     ) {
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
@@ -53,7 +62,11 @@ public class AgentService {
         this.readFileTool = readFileTool;
         this.writeFileTool = writeFileTool;
         this.listFilesTool = listFilesTool;
+        this.knowledgeSearchTool = knowledgeSearchTool;
+        this.networkAuditService = networkAuditService;
         this.provider = provider;
+        this.ollamaBaseUrl = ollamaBaseUrl;
+        this.externalAiBaseUrl = externalAiBaseUrl;
     }
 
     public List<Message> getChatHistory(String conversationId) {
@@ -65,13 +78,14 @@ public class AgentService {
             ConversationContextHolder.setConversationId(conversationId);
 
             String selectedModel = modelRouter.selectModel(conversationId, message);
+            recordModelRequest(selectedModel);
 
             System.out.println("Provider: " + provider);
             System.out.println("Selected model: " + selectedModel);
 
             ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                     .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
-                    .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool)
+                    .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, knowledgeSearchTool)
                     .user(message);
 
             if ("ollama".equalsIgnoreCase(provider)) {
@@ -103,11 +117,12 @@ public class AgentService {
                 ConversationContextHolder.setEventListener(sink::next);
 
                 String selectedModel = modelRouter.selectModel(conversationId, message);
+                recordModelRequest(selectedModel);
                 sink.next(AgentStreamEvent.router(selectedModel, "Selected model: " + selectedModel));
 
                 ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                         .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
-                        .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool)
+                        .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, knowledgeSearchTool)
                         .user(message);
 
                 if ("ollama".equalsIgnoreCase(provider)) {
@@ -140,5 +155,10 @@ public class AgentService {
                 ConversationContextHolder.clear();
             }
         });
+    }
+
+    private void recordModelRequest(String selectedModel) {
+        String endpoint = "ollama".equalsIgnoreCase(provider) ? ollamaBaseUrl : externalAiBaseUrl;
+        networkAuditService.record("MODEL", endpoint, "chat · " + selectedModel);
     }
 }

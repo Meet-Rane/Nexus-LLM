@@ -6,7 +6,7 @@ import os
 import chromadb
 from chromadb.utils import embedding_functions
 
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./.runtime/chroma")
 COLLECTION_NAME = "ps117_docs"
 
 # Use a local sentence-transformers model so we work fully offline

@@ -1,16 +1,42 @@
-# React + Vite
+# Nexus Sovereign AI Workbench
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React frontend for the local Spring agent and FastAPI RAG services.
 
-Currently, two official plugins are available:
+## Local services
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Start the services in this order:
 
-## React Compiler
+1. Ollama on `http://localhost:11434` with the configured model installed.
+2. RAG service on `http://localhost:8001`.
+3. Spring backend on `http://localhost:8090`.
+4. This frontend on `http://localhost:3000`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```powershell
+# RAG service
+cd ..\rag-service
+$env:HF_HUB_OFFLINE="1"
+$env:TRANSFORMERS_OFFLINE="1"
+.\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8001
 
-## Expanding the ESLint configuration
+# Spring backend (use a model already installed in Ollama)
+cd ..\ai-backend\sovereign-ai-workbench
+$env:OLLAMA_MODEL="llama3.1:8b"
+mvn spring-boot:run
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# Frontend
+cd ..\..\frontend-vite
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+The frontend defaults to the URLs above. Override them with `VITE_AGENT_URL` and `VITE_RAG_URL` when needed.
+The backend enforces loopback-only Ollama and RAG endpoints by default. Only set `SOVEREIGN_ENFORCE_LOCAL_ONLY=false` for an explicitly approved non-sovereign environment.
+
+## Checks
+
+```powershell
+npm run lint
+npm run build
+```
+
+Chat uses Spring Server-Sent Events, Documents and Knowledge Base use the local RAG API, and Artifacts uses the current browser-session conversation ID. Agents, Models, and Security read Spring runtime-status endpoints so the UI reflects the active local configuration, recorded model/RAG destinations, and missing demo dependencies.
