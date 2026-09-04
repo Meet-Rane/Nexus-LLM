@@ -29,7 +29,8 @@ public class CodeExecutionService {
     private final ArtifactStorageService artifactStorageService;
     private final ArtifactService artifactService;
 
-    private static final int TIMEOUT_SECONDS = 1000;
+    // Fast 30-second sandbox execution timeout
+    private static final int TIMEOUT_SECONDS = 30;
 
     public CodeExecutionService(
             ArtifactStorageService artifactStorageService,
@@ -115,14 +116,20 @@ public class CodeExecutionService {
             processBuilder.redirectErrorStream(true);
             process = processBuilder.start();
 
-            // 5. Wait for execution completion
+            // Immediately close stdin so interactive input() calls don't hang execution
+            try {
+                process.getOutputStream().close();
+            } catch (Exception ignored) {
+            }
+
+            // 5. Wait for execution completion (max 30 seconds)
             boolean finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
                 return new CodeExecutionResult(
                         -1,
-                        "Execution timed out after " + TIMEOUT_SECONDS + " seconds.",
+                        "Execution timed out after " + TIMEOUT_SECONDS + " seconds (Check for infinite loops or interactive input).",
                         true,
                         List.of()
                 );
@@ -185,7 +192,7 @@ public class CodeExecutionService {
                     "Sandbox execution failed: " + e.getMessage(),
                     false,
                     List.of()
-            );
+                );
         } finally {
             if (process != null && process.isAlive()) {
                 process.destroyForcibly();

@@ -18,18 +18,18 @@ public class CodeExecutionTool {
     @Tool(
         name = "execute_python_code",
         description = """
-            Execute Python code inside a secure isolated Docker sandbox.
+            Execute Python code, algorithms, simulations, data analysis, or numerical calculations inside a secure isolated Docker sandbox.
 
             Pre-installed libraries in sandbox:
-            - fpdf2 (PDF generation: use pdf.cell(0, 10, text, new_x='LMARGIN', new_y='NEXT') or pdf.write(8, text), output to 'output/filename.pdf')
-            - reportlab (PDF generation: SimpleDocTemplate('output/filename.pdf'))
-            - python-docx (Word documents)
-            - openpyxl (Excel spreadsheets)
-            - pandas, pillow
+            - pandas, openpyxl, pillow
 
             CRITICAL RULES FOR CALLING THIS TOOL:
-            1. All generated files MUST be saved into the 'output/' directory (e.g. 'output/spring_ai_guide.pdf').
-            2. ALWAYS provide the Python code inside the 'files' map (e.g. key: 'generate_pdf.py', value: '...python code...') AND set 'entryFile': 'generate_pdf.py'.
+            1. NEVER use interactive 'input()' statements. Always define test inputs, arguments, and parameters directly in the code.
+            2. Always use 'print(...)' to output calculation results, logs, and algorithmic steps.
+            3. Use this tool for computational algorithms, simulations, data transformations, and running Python code.
+            4. DO NOT use this tool to generate PDF or Word documents (use 'create_formatted_document' instead).
+            5. All generated files MUST be saved into the 'output/' directory (e.g. 'output/results.csv').
+            6. ALWAYS provide the Python code inside the 'files' map (e.g. key: 'main.py', value: '...python code...') AND set 'entryFile': 'main.py'.
             """
     )
     public CodeExecutionResult executePythonCode(

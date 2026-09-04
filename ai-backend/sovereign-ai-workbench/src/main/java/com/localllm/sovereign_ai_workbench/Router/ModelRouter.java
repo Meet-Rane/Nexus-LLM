@@ -11,19 +11,22 @@ public class ModelRouter {
 
     private final String codingModel;
     private final String generalModel;
+    private final String reasoningModel;
     private final ChatClient chatClient;
     private final ChatMemory chatMemory;
 
     public ModelRouter(
         @Qualifier("routerClient") ChatClient chatClient,
         ChatMemory chatMemory,
-        @Value("${ai.coding.model:meta/llama-3.3-70b-instruct}") String codingModel,
-        @Value("${ai.general.model:meta/llama-3.3-70b-instruct}") String generalModel
+        @Value("${ai.coding.model:nvidia/nemotron-3.5-lightning-30b-a3b}") String codingModel,
+        @Value("${ai.general.model:nvidia/nemotron-3.5-lightning-30b-a3b}") String generalModel,
+        @Value("${ai.reasoning.model:nvidia/nemotron-3.5-lightning-30b-a3b}") String reasoningModel
     ){
         this.chatClient = chatClient;
         this.chatMemory = chatMemory;
         this.codingModel = codingModel;
         this.generalModel = generalModel;
+        this.reasoningModel = reasoningModel != null && !reasoningModel.isBlank() ? reasoningModel : generalModel;
     }
 
     private String getConversationHistory(String conversationId) {
@@ -38,38 +41,69 @@ public class ModelRouter {
         }
     }
 
-    public String selectModel(String conversationId, String message) {
+    public RouteDecision selectModel(String conversationId, String message) {
         String lowerMessage = message != null ? message.toLowerCase() : "";
-        if (lowerMessage.contains("code") || lowerMessage.contains("function") || 
-            lowerMessage.contains("python") || lowerMessage.contains("script") ||
+
+        // 1. Fast Pattern Check for Coding & Tool Development
+        if (lowerMessage.contains("code") || lowerMessage.contains("python") || 
+            lowerMessage.contains("script") || lowerMessage.contains("function") ||
             lowerMessage.contains("fastapi") || lowerMessage.contains("bug") || 
             lowerMessage.contains("class") || lowerMessage.contains("method") ||
-            lowerMessage.contains("create") || lowerMessage.contains("write")) {
-            return codingModel;
+            lowerMessage.contains("endpoint") || lowerMessage.contains("csv") ||
+            lowerMessage.contains("dataset") || lowerMessage.contains("sql") ||
+            lowerMessage.contains("program") || lowerMessage.contains("docker")) {
+            return new RouteDecision(
+                    codingModel,
+                    "CODING",
+                    "Selected coding specialist: " + codingModel + " (Trigger: software engineering, script automation & data generation)"
+            );
         }
 
+        // 2. Fast Pattern Check for Engineering Calculations & Process Reasoning
+        if (lowerMessage.contains("calculate") || lowerMessage.contains("lmtd") ||
+            lowerMessage.contains("heat exchanger") || lowerMessage.contains("distillation") ||
+            lowerMessage.contains("reboiler") || lowerMessage.contains("thermodynamic") ||
+            lowerMessage.contains("mass balance") || lowerMessage.contains("pressure drop") ||
+            lowerMessage.contains("flow rate") || lowerMessage.contains("reynolds")) {
+            return new RouteDecision(
+                    reasoningModel,
+                    "CALCULATION_REASONING",
+                    "Selected reasoning & engineering specialist: " + reasoningModel + " (Trigger: refinery calculations & process analysis)"
+            );
+        }
+
+        // 3. Fast Pattern Check for Structured Industrial Documents & Approval Notes
+        if (lowerMessage.contains("approval note") || lowerMessage.contains("board presentation") ||
+            lowerMessage.contains("inspection report") || lowerMessage.contains("sop") ||
+            lowerMessage.contains("memo") || lowerMessage.contains("standard operating procedure") ||
+            lowerMessage.contains("pdf guide") || lowerMessage.contains("word document")) {
+            return new RouteDecision(
+                    generalModel,
+                    "DOCUMENT_APPROVAL",
+                    "Selected document synthesis model: " + generalModel + " (Trigger: industrial deliverable & formal documentation drafting)"
+            );
+        }
+
+        // 4. LLM-Based Contextual Intent Classification
         try {
             String conversationHistory = getConversationHistory(conversationId);
 
             String systemMessage = """
-                    You are an AI model router.
-                    Your job is to decide which model should handle the user's request.
+                    You are an intelligent AI model router for an industrial PSU / refinery workbench.
+                    Categorize the user's intent to route to the optimal on-premise model.
 
-                    Analyze BOTH:
-                    1. The previous conversation context
-                    2. The latest user message
+                    Categories:
+                    - CODING: software, script, programming, database queries, dataset creation
+                    - REASONING: engineering calculations, mass/heat balance, numerical analysis
+                    - GENERAL: explanations, summaries, policy inquiries, conversation
 
-                    Choose exactly one category:
-                    CODING
-                    GENERAL
-
-                    PREVIOUS CONVERSATION:
+                    CONVERSATION CONTEXT:
                     %s
 
-                    LATEST USER MESSAGE:
+                    LATEST REQUEST:
                     %s
 
-                    Return ONLY one word: CODING or GENERAL.
+                    Respond with ONLY one word: CODING, REASONING, or GENERAL.
                     """.formatted(conversationHistory, message);
 
             String decision = chatClient.prompt()
@@ -77,13 +111,31 @@ public class ModelRouter {
                     .call()
                     .content();
 
-            if (decision != null && decision.trim().toUpperCase().contains("CODING")) {
-                return codingModel;
+            if (decision != null) {
+                String upper = decision.trim().toUpperCase();
+                if (upper.contains("CODING")) {
+                    return new RouteDecision(
+                            codingModel,
+                            "CODING",
+                            "Selected coding specialist: " + codingModel + " (Intent: contextual code & script assistance)"
+                    );
+                } else if (upper.contains("REASONING")) {
+                    return new RouteDecision(
+                            reasoningModel,
+                            "CALCULATION_REASONING",
+                            "Selected reasoning model: " + reasoningModel + " (Intent: complex process engineering & reasoning)"
+                    );
+                }
             }
         } catch (Exception e) {
-            System.err.println("ModelRouter LLM evaluation failed: " + e.getMessage() + ". Defaulting to general model: " + generalModel);
+            System.err.println("ModelRouter LLM evaluation skipped/failed: " + e.getMessage());
         }
 
-        return generalModel;
+        // 5. Default Generic Model Selection
+        return new RouteDecision(
+                generalModel,
+                "GENERAL",
+                "Selected default general-purpose model: " + generalModel + " (General industrial assistance, knowledge query & reasoning)"
+        );
     } 
 }

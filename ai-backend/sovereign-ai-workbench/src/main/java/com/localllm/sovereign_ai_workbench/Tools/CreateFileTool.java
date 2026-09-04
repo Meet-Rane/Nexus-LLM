@@ -5,6 +5,7 @@ import com.localllm.sovereign_ai_workbench.Dto.AgentStreamEvent;
 import com.localllm.sovereign_ai_workbench.Dto.ArtifactDto;
 import com.localllm.sovereign_ai_workbench.Entity.Artifact;
 import com.localllm.sovereign_ai_workbench.Service.ArtifactService;
+import com.localllm.sovereign_ai_workbench.Service.DocumentGenerationService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
@@ -12,21 +13,21 @@ import org.springframework.stereotype.Component;
 public class CreateFileTool {
 
     private final ArtifactService artifactService;
+    private final DocumentGenerationService documentGenerationService;
 
-    public CreateFileTool(ArtifactService artifactService) {
+    public CreateFileTool(
+            ArtifactService artifactService,
+            DocumentGenerationService documentGenerationService) {
         this.artifactService = artifactService;
+        this.documentGenerationService = documentGenerationService;
     }
-
-    public record CreateFileRequest(String path, String content) {}
 
     @Tool(
         name = "create_file",
         description = """
-            Create a new file with the specified path and content relative to the conversation workspace directory.
-            Automatically creates parent folders if necessary.
-            
-            Use this tool when creating code files, text documents, or configuration files.
-            Do NOT provide absolute paths (e.g. C:\\ or /usr/); use relative paths like 'main.py' or 'src/app.py'.
+            Create a new file with the specified filename and content.
+            Use this tool when creating code files, text documents, CSV datasets, or configuration files.
+            Pass simple filenames such as 'intrusion_dataset.csv', 'reboiler_calc.py', or 'report.docx'.
             """
     )
     public String createFile(CreateFileRequest request) {
@@ -35,14 +36,30 @@ public class CreateFileTool {
             return "Error: Active conversation context not found.";
         }
 
-        ConversationContextHolder.emitEvent(AgentStreamEvent.toolStart("create_file", "Creating file: " + request.path()));
+        String rawPath = request.getPath() != null ? request.getPath() : "untitled.txt";
+        String lowerPath = rawPath.toLowerCase();
+        String cleanFileName = rawPath.replaceAll("^[\\\\/]+", "").replace('\\', '/');
+        if (cleanFileName.contains("/")) {
+            cleanFileName = cleanFileName.substring(cleanFileName.lastIndexOf('/') + 1);
+        }
+
+        ConversationContextHolder.emitEvent(AgentStreamEvent.toolStart("create_file", "Creating file: " + cleanFileName));
 
         try {
-            Artifact artifact = artifactService.saveFile(conversationId, request.path(), request.content());
-            ArtifactDto dto = ArtifactDto.fromEntity(artifact);
-            String result = "File created successfully: " + artifact.getFilePath();
+            Artifact artifact;
+            if (lowerPath.endsWith(".docx") || lowerPath.endsWith(".doc")) {
+                byte[] bytes = documentGenerationService.generateDocx(cleanFileName, request.getContent());
+                artifact = artifactService.saveFileBytes(conversationId, request.getPath(), bytes);
+            } else if (lowerPath.endsWith(".pdf")) {
+                byte[] bytes = documentGenerationService.generatePdf(cleanFileName, request.getContent());
+                artifact = artifactService.saveFileBytes(conversationId, request.getPath(), bytes);
+            } else {
+                artifact = artifactService.saveFile(conversationId, request.getPath(), request.getContent());
+            }
 
-            // Emit artifact creation event for frontend rendering
+            ArtifactDto dto = ArtifactDto.fromEntity(artifact);
+            String result = "File '" + artifact.getFileName() + "' created successfully (" + artifact.getFileSize() + " bytes).";
+
             ConversationContextHolder.emitEvent(AgentStreamEvent.artifactCreated(dto));
             ConversationContextHolder.emitEvent(AgentStreamEvent.toolCompleteWithArtifact("create_file", result, dto));
             
