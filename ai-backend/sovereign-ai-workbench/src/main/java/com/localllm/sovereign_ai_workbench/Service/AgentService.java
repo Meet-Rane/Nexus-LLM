@@ -52,6 +52,7 @@ public class AgentService {
                - When drafting approval notes or memos, use structured industrial sections: Subject, Background, Technical Evaluation, Safety & Compliance, and Recommendation.
             5. TOOL SELECTION RULES:
                - FOR GENERATING PDF OR WORD DOCUMENTS (.pdf, .docx): ALWAYS invoke the 'create_formatted_document' tool with the structured markdown content. DO NOT write or execute Python scripts to generate documents.
+               - FOR A DOCUMENT BASED ON AN UPLOADED MANUAL, SOP, OR REPORT: Ground it in the supplied local knowledge-base results and preserve the real source filename in the document.
                - FOR COMPUTATIONAL SIMULATIONS & CODE EXECUTION: Use 'execute_python_code' (pass code in 'files' map and set 'entryFile').
                - FOR SAVING DATA & SOURCE CODE FILES (.py, .csv, .json, .sql, .txt): Use 'create_file'.
                - FOR QUESTIONS ABOUT INTERNAL MANUALS, SOPS, OR UPLOADED REPORTS: Call 'search_knowledge_base' before answering and cite the returned source filenames.
@@ -115,6 +116,7 @@ public class AgentService {
             RouteDecision decision = modelRouter.selectModel(conversationId, message);
             String selectedModel = decision.model();
             recordModelRequest(selectedModel);
+            String effectiveMessage = enrichKnowledgeBackedDeliverable(message);
 
             System.out.println("Provider: " + provider);
             System.out.println("Selected model: " + selectedModel + " (" + decision.category() + ")");
@@ -123,7 +125,7 @@ public class AgentService {
                     .system(SYSTEM_PROMPT)
                     .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
                     .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, createDocumentTool, knowledgeSearchTool)
-                    .user(message);
+                    .user(effectiveMessage);
 
             if ("ollama".equalsIgnoreCase(provider)) {
                 request.options(
@@ -161,12 +163,13 @@ public class AgentService {
 
                 // Announce router decision with full reasoning to the UI stream
                 sink.next(AgentStreamEvent.router(selectedModel, decision.reason()));
+                String effectiveMessage = enrichKnowledgeBackedDeliverable(message);
 
                 ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                         .system(SYSTEM_PROMPT)
                         .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
                         .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, createDocumentTool, knowledgeSearchTool)
-                        .user(message);
+                        .user(effectiveMessage);
 
                 if ("ollama".equalsIgnoreCase(provider)) {
                     request.options(OllamaChatOptions.builder().model(selectedModel));
@@ -208,7 +211,7 @@ public class AgentService {
      * Auto-recovery interceptor for smaller open-weight models that occasionally output
      * markdown JSON tool call blocks in their text response instead of native tool tokens.
      */
-    private String handleTextSimulatedToolCalls(String conversationId, String responseText) {
+    String handleTextSimulatedToolCalls(String conversationId, String responseText) {
         if (responseText == null || responseText.isBlank()) {
             return responseText;
         }
@@ -236,16 +239,29 @@ public class AgentService {
                     }
                 }
 
-                if (jsonCandidate.trim().startsWith("{")) {
+                String trimmedCandidate = jsonCandidate.trim();
+                if (!trimmedCandidate.startsWith("{")) {
+                    int objectStart = trimmedCandidate.indexOf('{');
+                    int objectEnd = trimmedCandidate.lastIndexOf('}');
+                    if (objectStart >= 0 && objectEnd > objectStart) {
+                        trimmedCandidate = trimmedCandidate.substring(objectStart, objectEnd + 1);
+                    }
+                }
+                trimmedCandidate = closeTruncatedJsonObject(trimmedCandidate);
+
+                if (trimmedCandidate.startsWith("{")) {
                     ObjectMapper mapper = new ObjectMapper();
                     mapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature(), true);
                     mapper.configure(com.fasterxml.jackson.core.json.JsonReadFeature.ALLOW_SINGLE_QUOTES.mappedFeature(), true);
-                    JsonNode root = mapper.readTree(jsonCandidate.trim());
+                    JsonNode root = mapper.readTree(trimmedCandidate);
 
                     String toolName = root.has("name") ? root.get("name").asText() : "";
                     JsonNode paramsNode = root.has("parameters")
                             ? root.get("parameters")
                             : root.has("arguments") ? root.get("arguments") : root;
+                    if (paramsNode.has("request") && paramsNode.get("request").isObject()) {
+                        paramsNode = paramsNode.get("request");
+                    }
 
                     if (toolName.contains("search_knowledge_base")) {
                         String query = paramsNode.has("query") ? paramsNode.get("query").asText() : "";
@@ -290,6 +306,73 @@ public class AgentService {
             }
         }
         return responseText;
+    }
+
+    private static String closeTruncatedJsonObject(String candidate) {
+        int objectDepth = 0;
+        boolean insideString = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < candidate.length(); i++) {
+            char current = candidate.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\' && insideString) {
+                escaped = true;
+                continue;
+            }
+            if (current == '"') {
+                insideString = !insideString;
+                continue;
+            }
+            if (!insideString) {
+                if (current == '{') {
+                    objectDepth++;
+                } else if (current == '}') {
+                    objectDepth--;
+                }
+            }
+        }
+
+        if (insideString || objectDepth <= 0) {
+            return candidate;
+        }
+        return candidate + "}".repeat(objectDepth);
+    }
+
+    String enrichKnowledgeBackedDeliverable(String message) {
+        String lowerMessage = message == null ? "" : message.toLowerCase();
+        boolean referencesLocalKnowledge = lowerMessage.contains("uploaded")
+                || lowerMessage.contains("manual")
+                || lowerMessage.contains("sop")
+                || lowerMessage.contains("inspection report");
+        boolean requestsDocument = lowerMessage.contains("approval note")
+                || lowerMessage.contains("word")
+                || lowerMessage.contains(".docx")
+                || lowerMessage.contains("pdf")
+                || lowerMessage.contains("document");
+
+        if (!referencesLocalKnowledge || !requestsDocument) {
+            return message;
+        }
+
+        String knowledge = knowledgeSearchTool.searchKnowledgeBase(
+                new KnowledgeSearchTool.KnowledgeSearchRequest(message, 3)
+        );
+        if (knowledge.startsWith("Knowledge base search failed:")
+                || knowledge.startsWith("No relevant passages")) {
+            return message;
+        }
+
+        return message + """
+
+
+                Use the following retrieved on-premise evidence as the factual basis for the document.
+                Preserve its real source filename in the Source section:
+
+                """ + knowledge;
     }
 
     private void recordModelRequest(String selectedModel) {
