@@ -6,6 +6,7 @@ import { getSystemStatus } from "../api/client";
 const descriptions = {
   search_knowledge_base: "Retrieve grounded passages from the local Chroma knowledge base.",
   execute_python_code: "Run generated Python inside the configured Docker sandbox.",
+  create_formatted_document: "Generate a professionally formatted PDF or Word deliverable locally.",
   create_file: "Create a conversation-scoped deliverable in local artifact storage.",
   read_file: "Read an existing artifact without leaving the workstation.",
   write_file: "Update an artifact during a multi-step task.",

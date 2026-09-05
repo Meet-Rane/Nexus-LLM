@@ -10,7 +10,15 @@ Open PowerShell in this directory and run:
 powershell -ExecutionPolicy Bypass -File .\setup-nexus.ps1
 ```
 
-The setup installs frontend and RAG dependencies, caches the embedding model, ensures the Ollama model is present, writes ignored local configuration files, builds the Docker sandbox when Docker is available, and runs the frontend and backend checks.
+The setup installs frontend and RAG dependencies, caches the embedding model, downloads the configured general, coding, and engineering-reasoning Ollama models, writes ignored local configuration files, builds the Docker sandbox, and runs the frontend and backend checks.
+
+The default local routes are:
+
+- General and document work: `llama3.1:8b`
+- Coding and data tasks: `qwen2.5-coder:7b`
+- Engineering calculations: `deepseek-r1:8b`
+
+On Windows, Docker Desktop requires both **Windows Subsystem for Linux** and **Virtual Machine Platform** to be enabled, followed by a restart. Wait for Docker Desktop to report that its engine is running before executing the setup command.
 
 ## Start Nexus
 
@@ -41,4 +49,4 @@ Only processes recorded by the launcher are stopped. An Ollama server that was a
 - Agent health: <http://127.0.0.1:8090/ai/health>
 - Ollama: <http://127.0.0.1:11434>
 
-Docker is required for sandboxed code execution. Tesseract and Poppler are required for image and scanned-PDF OCR.
+Docker is required for sandboxed code execution. Tesseract and Poppler are required for image and scanned-PDF OCR. Formatted PDF and Word artifact generation runs directly inside the Java backend and does not require Docker.

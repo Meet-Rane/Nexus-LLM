@@ -66,6 +66,15 @@ public class KnowledgeSearchTool {
                 return result;
             }
 
+            if (response.sources() != null) {
+                ConversationContextHolder.setKnowledgeSources(
+                        response.sources().stream()
+                                .filter(source -> source != null && !source.isBlank())
+                                .distinct()
+                                .toList()
+                );
+            }
+
             StringBuilder result = new StringBuilder("Local knowledge base results:\n");
             for (int i = 0; i < response.chunks().size(); i++) {
                 String source = response.sources() != null && i < response.sources().size()
@@ -74,6 +83,7 @@ public class KnowledgeSearchTool {
                 result.append("\n[").append(i + 1).append("] Source: ").append(source)
                         .append("\n").append(response.chunks().get(i)).append("\n");
             }
+            result.append("\nCitation requirement: include the relevant source filename(s) in the final answer.");
 
             ConversationContextHolder.emitEvent(AgentStreamEvent.toolComplete(
                     "search_knowledge_base",

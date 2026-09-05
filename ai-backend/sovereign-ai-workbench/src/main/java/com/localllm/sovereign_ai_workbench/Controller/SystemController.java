@@ -17,6 +17,7 @@ public class SystemController {
     private final String provider;
     private final String codingModel;
     private final String generalModel;
+    private final String reasoningModel;
     private final String ollamaBaseUrl;
     private final String ragBaseUrl;
     private final String artifactStorage;
@@ -29,6 +30,7 @@ public class SystemController {
             @Value("${ai.provider}") String provider,
             @Value("${ai.coding.model}") String codingModel,
             @Value("${ai.general.model}") String generalModel,
+            @Value("${ai.reasoning.model:${ai.general.model}}") String reasoningModel,
             @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl,
             @Value("${rag.service.base-url}") String ragBaseUrl,
             @Value("${sandbox.artifact-storage}") String artifactStorage,
@@ -40,6 +42,7 @@ public class SystemController {
         this.provider = provider;
         this.codingModel = codingModel;
         this.generalModel = generalModel;
+        this.reasoningModel = reasoningModel;
         this.ollamaBaseUrl = ollamaBaseUrl;
         this.ragBaseUrl = ragBaseUrl;
         this.artifactStorage = artifactStorage;
@@ -55,11 +58,13 @@ public class SystemController {
                 provider,
                 List.of(
                         new ModelRoute("Coding", codingModel),
-                        new ModelRoute("General and documents", generalModel)
+                        new ModelRoute("General and documents", generalModel),
+                        new ModelRoute("Engineering reasoning", reasoningModel)
                 ),
                 List.of(
                         "search_knowledge_base",
                         "execute_python_code",
+                        "create_formatted_document",
                         "create_file",
                         "read_file",
                         "write_file",

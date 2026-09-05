@@ -23,13 +23,16 @@ import java.util.stream.Stream;
 @Service
 public class CodeExecutionService {
 
+    private static final int MAX_OUTPUT_CHARS = 1_000_000;
+
     @Value("${sandbox.docker.command:docker}")
     private String dockerCommand;
 
+    @Value("${sandbox.timeout-seconds:30}")
+    private int timeoutSeconds;
+
     private final ArtifactStorageService artifactStorageService;
     private final ArtifactService artifactService;
-
-    private static final int TIMEOUT_SECONDS = 1000;
 
     public CodeExecutionService(
             ArtifactStorageService artifactStorageService,
@@ -95,6 +98,16 @@ public class CodeExecutionService {
                 }
             }
 
+            String requestedEntryFile = request.getEntryFile();
+            if (requestedEntryFile == null || requestedEntryFile.isBlank()) {
+                throw new IllegalArgumentException("entryFile is required.");
+            }
+            Path entryFile = workspace.resolve(requestedEntryFile).normalize();
+            if (!entryFile.startsWith(workspace) || !Files.isRegularFile(entryFile)) {
+                throw new IllegalArgumentException("Invalid entry file: " + requestedEntryFile);
+            }
+            String containerEntryFile = workspace.relativize(entryFile).toString().replace('\\', '/');
+
             // 4. Start Docker container
             ProcessBuilder processBuilder = new ProcessBuilder(
                     dockerCommand,
@@ -109,33 +122,50 @@ public class CodeExecutionService {
                     "-v", workspace.toAbsolutePath() + ":/sandbox:rw",
                     "sovereign-python-sandbox",
                     "python",
-                    "/sandbox/" + request.getEntryFile()
+                    "/sandbox/" + containerEntryFile
             );
 
             processBuilder.redirectErrorStream(true);
             process = processBuilder.start();
 
+            // Close stdin so generated scripts cannot wait forever for input().
+            process.getOutputStream().close();
+
+            StringBuilder output = new StringBuilder();
+            Process runningProcess = process;
+            Thread outputReader = Thread.ofVirtual().start(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(runningProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (output.length() < MAX_OUTPUT_CHARS) {
+                            int remaining = MAX_OUTPUT_CHARS - output.length();
+                            output.append(line, 0, Math.min(line.length(), remaining)).append('\n');
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            });
+
             // 5. Wait for execution completion
-            boolean finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
+                process.waitFor(2, TimeUnit.SECONDS);
+                outputReader.join(2_000);
                 return new CodeExecutionResult(
                         -1,
-                        "Execution timed out after " + TIMEOUT_SECONDS + " seconds.",
+                        "Execution timed out after " + timeoutSeconds + " seconds. Avoid infinite loops and interactive input().",
                         true,
                         List.of()
                 );
             }
 
-            // 6. Read stdout/stderr
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
+            // 6. Finish draining stdout/stderr without risking a full process pipe deadlock.
+            outputReader.join(2_000);
+            if (output.length() >= MAX_OUTPUT_CHARS) {
+                output.append("[Output truncated after ").append(MAX_OUTPUT_CHARS).append(" characters]\n");
             }
 
             // 7. Store generated output files permanently in ArtifactService

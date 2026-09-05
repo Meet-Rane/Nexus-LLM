@@ -1,12 +1,15 @@
 package com.localllm.sovereign_ai_workbench.Config;
 
 import com.localllm.sovereign_ai_workbench.Dto.AgentStreamEvent;
+
+import java.util.List;
 import java.util.function.Consumer;
 
 public class ConversationContextHolder {
 
     private static final ThreadLocal<String> CONVERSATION_ID_HOLDER = new ThreadLocal<>();
     private static final ThreadLocal<Consumer<AgentStreamEvent>> EVENT_LISTENER_HOLDER = new ThreadLocal<>();
+    private static final ThreadLocal<List<String>> KNOWLEDGE_SOURCES_HOLDER = new ThreadLocal<>();
 
     public static void setConversationId(String conversationId) {
         CONVERSATION_ID_HOLDER.set(conversationId);
@@ -35,8 +38,18 @@ public class ConversationContextHolder {
         }
     }
 
+    public static void setKnowledgeSources(List<String> sources) {
+        KNOWLEDGE_SOURCES_HOLDER.set(sources == null ? List.of() : List.copyOf(sources));
+    }
+
+    public static List<String> getKnowledgeSources() {
+        List<String> sources = KNOWLEDGE_SOURCES_HOLDER.get();
+        return sources == null ? List.of() : sources;
+    }
+
     public static void clear() {
         CONVERSATION_ID_HOLDER.remove();
         EVENT_LISTENER_HOLDER.remove();
+        KNOWLEDGE_SOURCES_HOLDER.remove();
     }
 }
