@@ -3,9 +3,12 @@ POST /ingest/file   — upload a document, OCR/extract, chunk, embed, store in C
 POST /ingest/text   — ingest raw text directly (useful for pre-loading SOPs via curl)
 GET  /ingest/status — how many chunks are stored
 """
+import asyncio
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from pytesseract import TesseractNotFoundError
+from pdf2image.exceptions import PDFInfoNotInstalledError
 
 from services.extractor import extract_text
 from services.chunker import chunk_text
@@ -30,15 +33,29 @@ async def ingest_file(file: UploadFile = File(...)):
     """Upload a PDF, image, or .txt file — extracted, chunked, and embedded into ChromaDB."""
     contents = await file.read()
     try:
-        text = extract_text(contents, file.filename)
+        # OCR and PDF parsing are CPU-heavy. Run them outside FastAPI's event
+        # loop so health checks and retrieval stay responsive during indexing.
+        text = await asyncio.to_thread(extract_text, contents, file.filename)
     except ValueError as e:
         raise HTTPException(status_code=415, detail=str(e))
+    except TesseractNotFoundError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="This document requires OCR, but Tesseract was not found. Install Tesseract or configure TESSERACT_CMD, then restart the RAG service.",
+        ) from e
+    except PDFInfoNotInstalledError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="This scanned PDF requires Poppler (pdftoppm), but it was not found. Install Poppler, add it to PATH, then restart the RAG service.",
+        ) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document processing failed: {e}") from e
 
     if not text.strip():
         raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
 
     chunks = chunk_text(text)
-    _store_chunks(chunks, source=file.filename)
+    await asyncio.to_thread(_store_chunks, chunks, file.filename)
 
     return IngestResponse(
         source=file.filename,

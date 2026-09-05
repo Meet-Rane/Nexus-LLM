@@ -106,11 +106,15 @@ else {
 }
 
 if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:8090/ai/health")) {
-    $mavenCommand = (Get-Command "mvn.cmd" -ErrorAction Stop).Source
+    $javaCommand = (Get-Command "java.exe" -ErrorAction Stop).Source
+    $backendJar = Join-Path $backendRoot "target\sovereign-ai-workbench-0.0.1-SNAPSHOT.jar"
+    if (-not (Test-Path -LiteralPath $backendJar)) {
+        throw "Backend JAR is missing. Run setup-nexus.ps1 first."
+    }
     Start-NexusProcess `
         -Label "backend" `
-        -FilePath $mavenCommand `
-        -ArgumentList @("spring-boot:run") `
+        -FilePath $javaCommand `
+        -ArgumentList @("-jar", "target/sovereign-ai-workbench-0.0.1-SNAPSHOT.jar") `
         -WorkingDirectory $backendRoot
     Wait-NexusEndpoint -Label "Agent Engine" -Url "http://127.0.0.1:8090/ai/health"
 }
@@ -119,11 +123,15 @@ else {
 }
 
 if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:3000")) {
-    $npmCommand = (Get-Command "npm.cmd" -ErrorAction Stop).Source
+    $nodeCommand = (Get-Command "node.exe" -ErrorAction Stop).Source
+    $viteCli = Join-Path $frontendRoot "node_modules\vite\bin\vite.js"
+    if (-not (Test-Path -LiteralPath $viteCli)) {
+        throw "Vite is missing. Run setup-nexus.ps1 first."
+    }
     Start-NexusProcess `
         -Label "frontend" `
-        -FilePath $npmCommand `
-        -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1", "--port", "3000") `
+        -FilePath $nodeCommand `
+        -ArgumentList @("node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "3000") `
         -WorkingDirectory $frontendRoot
     Wait-NexusEndpoint -Label "Frontend" -Url "http://127.0.0.1:3000" -TimeoutSeconds 60
 }

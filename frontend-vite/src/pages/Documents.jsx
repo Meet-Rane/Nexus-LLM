@@ -32,8 +32,9 @@ export default function Documents() {
         await ingestFile(file);
         setDocuments((current) => current.map((item) => item.name === file.name ? { ...item, status: "Indexed" } : item));
         getRagStatus().then(setRagStatus).catch(() => {});
-      } catch {
-        setDocuments((current) => current.map((item) => item.name === file.name ? { ...item, status: "RAG offline" } : item));
+      } catch (error) {
+        const detail = error?.response?.data?.detail || error?.message || "Document indexing failed";
+        setDocuments((current) => current.map((item) => item.name === file.name ? { ...item, status: "Failed", error: detail } : item));
       }
     }));
   };
@@ -59,7 +60,7 @@ export default function Documents() {
               <tr key={item.name}>
                 <td><div className="flex items-center gap-3"><div className="icon-box icon-box-accent"><Icon size={15} /></div><div><p className="font-medium text-text">{item.name}</p><p className="mt-0.5 font-mono text-[9px] text-faint">{item.size}</p></div></div></td>
                 <td>{item.type}</td><td>{item.pages}</td><td>{item.added}</td>
-                <td><Badge tone={item.status === "Processing" ? "accent" : item.status === "RAG offline" ? "danger" : "teal"} dot>{item.status}</Badge></td><td><TableActions /></td>
+                <td><div><Badge tone={item.status === "Processing" ? "accent" : item.status === "Failed" ? "danger" : "teal"} dot>{item.status}</Badge>{item.error && <p className="mt-1 max-w-xs text-[10px] leading-4 text-danger">{item.error}</p>}</div></td><td><TableActions /></td>
               </tr>
             ); })}</tbody>
           </table>

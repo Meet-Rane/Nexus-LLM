@@ -4,7 +4,8 @@ export const AGENT_URL = import.meta.env.VITE_AGENT_URL || "http://localhost:809
 export const RAG_URL = import.meta.env.VITE_RAG_URL || "http://localhost:8001";
 
 const agentClient = axios.create({ baseURL: AGENT_URL, timeout: 300000 });
-const ragClient = axios.create({ baseURL: RAG_URL, timeout: 120000 });
+// Scanned manuals can take several minutes to OCR on a CPU-only workstation.
+const ragClient = axios.create({ baseURL: RAG_URL, timeout: 600000 });
 
 const CONVERSATION_KEY = "nexus.activeConversationId";
 

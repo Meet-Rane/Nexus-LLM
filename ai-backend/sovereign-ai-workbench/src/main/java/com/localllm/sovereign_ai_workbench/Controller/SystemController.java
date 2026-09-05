@@ -69,7 +69,7 @@ public class SystemController {
                 ragBaseUrl,
                 artifactStorage,
                 commandAvailable(dockerCommand, "version"),
-                commandAvailable("tesseract", "--version"),
+                tesseractAvailable(),
                 isLocalRuntime(),
                 localOnlyPolicyEnforced,
                 sandboxNetworkDisabled,
@@ -117,6 +117,22 @@ public class SystemController {
                 process.destroyForcibly();
             }
         }
+    }
+
+    private boolean tesseractAvailable() {
+        if (commandAvailable("tesseract", "--version")) {
+            return true;
+        }
+
+        String configuredCommand = System.getenv("TESSERACT_CMD");
+        if (configuredCommand != null
+                && !configuredCommand.isBlank()
+                && commandAvailable(configuredCommand, "--version")) {
+            return true;
+        }
+
+        return commandAvailable("C:\\Program Files\\Tesseract-OCR\\tesseract.exe", "--version")
+                || commandAvailable("C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe", "--version");
     }
 
     public record ModelRoute(String taskType, String model) {}

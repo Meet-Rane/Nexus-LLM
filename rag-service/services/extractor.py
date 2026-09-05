@@ -6,10 +6,32 @@ Extracts plain text from uploaded files.
 """
 import io
 import os
+import shutil
 import pytesseract
 import pdfplumber
 from pdf2image import convert_from_bytes
 from PIL import Image
+
+
+def _configure_tesseract() -> None:
+    """Find Tesseract from configuration, PATH, or common Windows installs."""
+    candidates = [
+        os.getenv("TESSERACT_CMD"),
+        shutil.which("tesseract"),
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        resolved = candidate if os.path.isfile(candidate) else shutil.which(candidate)
+        if resolved:
+            pytesseract.pytesseract.tesseract_cmd = resolved
+            return
+
+
+_configure_tesseract()
 
 
 def _is_scanned_pdf(pdf_bytes: bytes) -> bool:

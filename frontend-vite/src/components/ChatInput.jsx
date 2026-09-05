@@ -27,8 +27,9 @@ export function ChatInput({ onSend, loading, compact = false }) {
     try {
       const result = await ingestFile(file);
       setNotice({ ok: true, text: `${result.chunks_stored ?? "Document"} chunks indexed locally` });
-    } catch {
-      setNotice({ ok: false, text: "Local ingestion service is not running" });
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || "Document indexing failed";
+      setNotice({ ok: false, text: detail });
     } finally {
       setIngesting(false);
       event.target.value = "";

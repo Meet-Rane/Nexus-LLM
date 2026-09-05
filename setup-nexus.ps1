@@ -106,6 +106,8 @@ Push-Location $backendRoot
 try {
     & mvn.cmd test
     if ($LASTEXITCODE -ne 0) { throw "Backend tests failed." }
+    & mvn.cmd package -DskipTests
+    if ($LASTEXITCODE -ne 0) { throw "Backend packaging failed." }
 }
 finally {
     Pop-Location
