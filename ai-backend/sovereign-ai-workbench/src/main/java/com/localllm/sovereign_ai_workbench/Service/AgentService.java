@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import com.localllm.sovereign_ai_workbench.Config.ConversationContextHolder;
 import com.localllm.sovereign_ai_workbench.Dto.AgentStreamEvent;
@@ -152,7 +153,7 @@ public class AgentService {
     }
 
     public Flux<AgentStreamEvent> streamChat(String conversationId, String message) {
-        return Flux.create(sink -> {
+        return Flux.<AgentStreamEvent>create(sink -> {
             try {
                 ConversationContextHolder.setConversationId(conversationId);
                 ConversationContextHolder.setEventListener(sink::next);
@@ -204,7 +205,7 @@ public class AgentService {
             } finally {
                 ConversationContextHolder.clear();
             }
-        });
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     /**

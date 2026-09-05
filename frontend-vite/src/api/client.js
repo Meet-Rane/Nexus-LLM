@@ -39,56 +39,74 @@ export async function streamMessage(text, { conversationId = getConversationId()
   const url = new URL("/ai/chat/stream", AGENT_URL);
   url.searchParams.set("conversationId", conversationId);
   url.searchParams.set("message", text);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 300000);
+  const forwardAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", forwardAbort, { once: true });
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "text/event-stream" },
-    signal,
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "text/event-stream" },
+      signal: controller.signal,
+    });
 
-  if (!response.ok || !response.body) {
-    throw new Error(`Agent request failed with status ${response.status}`);
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let completeText = "";
-  let selectedModel = null;
-  let lastArtifact = null;
-
-  const dispatchBlock = (block) => {
-    const data = block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-    if (!data) return;
-
-    let event;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      return;
+    if (!response.ok || !response.body) {
+      throw new Error(`Agent request failed with status ${response.status}`);
     }
 
-    if (event.type === "TEXT") completeText += event.content || "";
-    if (event.type === "ROUTER") selectedModel = event.model;
-    if (event.artifact) lastArtifact = event.artifact;
-    onEvent?.(event);
-  };
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let completeText = "";
+    let selectedModel = null;
+    let lastArtifact = null;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    const blocks = buffer.split(/\r?\n\r?\n/);
-    buffer = blocks.pop() || "";
-    blocks.forEach(dispatchBlock);
-    if (done) break;
+    const dispatchBlock = (block) => {
+      const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      if (!data) return;
+
+      let event;
+      try {
+        event = JSON.parse(data);
+      } catch {
+        return;
+      }
+
+      if (event.type === "TEXT") completeText += event.content || "";
+      if (event.type === "ROUTER") selectedModel = event.model;
+      if (event.artifact) lastArtifact = event.artifact;
+      onEvent?.(event);
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() || "";
+      blocks.forEach(dispatchBlock);
+      if (done) break;
+    }
+
+    if (buffer.trim()) dispatchBlock(buffer);
+    return { text: completeText, model_used: selectedModel, artifact: lastArtifact };
+  } catch (error) {
+    if (timedOut) {
+      throw new Error("Agent request timed out after 5 minutes.", { cause: error });
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", forwardAbort);
   }
-
-  if (buffer.trim()) dispatchBlock(buffer);
-  return { text: completeText, model_used: selectedModel, artifact: lastArtifact };
 }
 
 export async function pingAgent() {
