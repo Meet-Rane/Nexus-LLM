@@ -173,6 +173,16 @@ export async function getNetworkAudit() {
   return data;
 }
 
+export async function getOsNetworkMonitor() {
+  const { data } = await agentClient.get("/api/system/os-network-monitor");
+  return data;
+}
+
+export async function resetOsNetworkMonitor() {
+  const { data } = await agentClient.post("/api/system/os-network-monitor/reset");
+  return data;
+}
+
 export async function getChatHistory(conversationId = getConversationId()) {
   const { data } = await agentClient.get(`/ai/history/${encodeURIComponent(conversationId)}`);
   return data;

@@ -73,7 +73,7 @@ public class WebSecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ai/health").permitAll()
-                        .requestMatchers("/api/system/network-audit").hasRole("ADMIN")
+                        .requestMatchers("/api/system/network-audit", "/api/system/os-network-monitor/**").hasRole("ADMIN")
                         .requestMatchers("/sandbox/**").hasRole("ADMIN")
                         .requestMatchers("/ai/**", "/api/conversations/**", "/api/system/status").authenticated()
                         .requestMatchers("/error").permitAll()

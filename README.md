@@ -50,3 +50,11 @@ Only processes recorded by the launcher are stopped. An Ollama server that was a
 - Ollama: <http://127.0.0.1:11434>
 
 Docker is required for sandboxed code execution. Tesseract and Poppler are required for image and scanned-PDF OCR. Formatted PDF and Word artifact generation runs directly inside the Java backend and does not require Docker.
+
+## OS-wide sovereignty monitor
+
+The **Sovereignty** page samples the Windows TCP connection table every two seconds and shows process names, PIDs, local and remote endpoints, connection state, and loopback/external classification. It monitors the whole operating system for transparency while separately marking processes recorded by the Nexus launcher. The sovereign verdict is based on tracked Nexus processes, so unrelated browser or desktop traffic is shown as host context rather than incorrectly attributed to Nexus.
+
+Only administrators can read or reset the monitor through `/api/system/os-network-monitor`. Optional configuration variables are `OS_NETWORK_MONITOR_ENABLED`, `OS_NETWORK_MONITOR_COMMAND`, `OS_NETWORK_MONITOR_NEXUS_STATE_PATH`, and `OS_NETWORK_MONITOR_POLL_MS`.
+
+This is connection-state evidence, not payload inspection or full packet capture. Very short TCP connections between samples and UDP traffic require Windows Filtering Platform, firewall logging, or a packet-capture tool for stronger venue evidence.

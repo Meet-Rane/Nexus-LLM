@@ -39,4 +39,4 @@ npm run lint
 npm run build
 ```
 
-Chat uses Spring Server-Sent Events, Documents and Knowledge Base use the local RAG API, and Artifacts uses the current browser-session conversation ID. Agents, Models, and Security read Spring runtime-status endpoints so the UI reflects the active local configuration, recorded model/RAG destinations, and missing demo dependencies.
+Chat uses Spring Server-Sent Events, Documents and Knowledge Base use the local RAG API, and Artifacts uses the current browser-session conversation ID. Agents and Models read Spring runtime-status endpoints. Security combines the application destination audit with an administrator-only Windows TCP monitor that distinguishes tracked Nexus processes from unrelated host traffic.

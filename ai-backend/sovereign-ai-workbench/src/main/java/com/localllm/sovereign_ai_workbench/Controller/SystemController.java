@@ -1,8 +1,10 @@
 package com.localllm.sovereign_ai_workbench.Controller;
 
 import com.localllm.sovereign_ai_workbench.Service.NetworkAuditService;
+import com.localllm.sovereign_ai_workbench.Service.OsNetworkMonitorService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,6 +27,7 @@ public class SystemController {
     private final boolean localOnlyPolicyEnforced;
     private final boolean sandboxNetworkDisabled;
     private final NetworkAuditService networkAuditService;
+    private final OsNetworkMonitorService osNetworkMonitorService;
 
     public SystemController(
             @Value("${ai.provider}") String provider,
@@ -37,7 +40,8 @@ public class SystemController {
             @Value("${sandbox.docker.command}") String dockerCommand,
             @Value("${sovereign.enforce-local-only:true}") boolean localOnlyPolicyEnforced,
             @Value("${sandbox.network-disabled:true}") boolean sandboxNetworkDisabled,
-            NetworkAuditService networkAuditService
+            NetworkAuditService networkAuditService,
+            OsNetworkMonitorService osNetworkMonitorService
     ) {
         this.provider = provider;
         this.codingModel = codingModel;
@@ -50,6 +54,7 @@ public class SystemController {
         this.localOnlyPolicyEnforced = localOnlyPolicyEnforced;
         this.sandboxNetworkDisabled = sandboxNetworkDisabled;
         this.networkAuditService = networkAuditService;
+        this.osNetworkMonitorService = osNetworkMonitorService;
     }
 
     @GetMapping("/status")
@@ -79,13 +84,23 @@ public class SystemController {
                 localOnlyPolicyEnforced,
                 sandboxNetworkDisabled,
                 true,
-                false
+                osNetworkMonitorService.isOperational()
         );
     }
 
     @GetMapping("/network-audit")
     public List<NetworkAuditService.NetworkAuditEvent> networkAudit() {
         return networkAuditService.recentEvents();
+    }
+
+    @GetMapping("/os-network-monitor")
+    public OsNetworkMonitorService.MonitorSnapshot osNetworkMonitor() {
+        return osNetworkMonitorService.snapshot();
+    }
+
+    @PostMapping("/os-network-monitor/reset")
+    public OsNetworkMonitorService.MonitorSnapshot resetOsNetworkMonitor() {
+        return osNetworkMonitorService.reset();
     }
 
     private boolean isLocalRuntime() {
