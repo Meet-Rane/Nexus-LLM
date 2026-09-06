@@ -1,4 +1,9 @@
 import { Bot, Check, Download, UserRound } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import { downloadArtifact } from "../api/client";
 import { Badge } from "./Ui";
 
@@ -28,7 +33,14 @@ export function ChatMessage({ message }) {
               ))}
             </div>
           )}
-          <p className="whitespace-pre-wrap break-words">{message.text || "Waiting for the local agent…"}</p>
+          <div className="message-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+            >
+              {normalizeMathDelimiters(message.text || "Waiting for the local agent…")}
+            </ReactMarkdown>
+          </div>
           {!isUser && artifacts.map((artifact) => (
             <button
               type="button"
@@ -45,4 +57,10 @@ export function ChatMessage({ message }) {
       </div>
     </article>
   );
+}
+
+function normalizeMathDelimiters(value) {
+  return String(value)
+    .replace(/\\+\[([\s\S]*?)\\+\]/g, (_, expression) => `\n\n$$\n${expression.trim()}\n$$\n\n`)
+    .replace(/\\+\(([\s\S]*?)\\+\)/g, (_, expression) => `$${expression.trim()}$`);
 }
