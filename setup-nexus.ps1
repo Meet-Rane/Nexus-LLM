@@ -2,7 +2,7 @@
 param(
     [string]$GeneralModel = "llama3.1:8b",
     [string]$CodingModel = "qwen2.5-coder:7b",
-    [string]$ReasoningModel = "deepseek-r1:8b",
+    [string]$ReasoningModel = "qwen2.5-coder:7b",
     [string]$PythonExecutable = "C:\Program Files\Blender Foundation\Blender 5.0\5.0\python\bin\python.exe"
 )
 
@@ -50,6 +50,11 @@ spring.ai.ollama.chat.model=$GeneralModel
 ai.coding.model=$CodingModel
 ai.general.model=$GeneralModel
 ai.reasoning.model=$ReasoningModel
+ai.router.llm-fallback=false
+ai.ollama.num-predict=1600
+ai.ollama.num-ctx=4096
+ai.ollama.keep-alive=10m
+ai.ollama.temperature=0.1
 rag.service.base-url=http://127.0.0.1:8001
 sandbox.docker.command=$configuredDockerCommand
 sandbox.network-disabled=true

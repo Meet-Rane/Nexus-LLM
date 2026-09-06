@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,10 +56,14 @@ public class AgentService {
                - Provide a clear, structured summary of the created artifact, key technical highlights, assumptions, and findings.
             3. ENGINEERING RIGOR:
                - Show step-by-step engineering calculations with explicit formulas, input parameters, and standard engineering units (°C, bar, kg/h, kW, cSt, MW).
+               - Keep calculations under 220 words unless the user requests a detailed derivation, and verify dimensional consistency before the final answer.
+               - Unit reminder: 1 kJ/s equals 1 kW. Do not divide kJ/s by 1000 when converting it to kW.
             4. FORMAL INDUSTRIAL DOCUMENTS:
                - When drafting approval notes or memos, use structured industrial sections: Subject, Background, Technical Evaluation, Safety & Compliance, and Recommendation.
             5. TOOL SELECTION RULES:
-               - FOR GENERATING PDF OR WORD DOCUMENTS (.pdf, .docx): ALWAYS invoke the 'create_formatted_document' tool with the structured markdown content. DO NOT write or execute Python scripts to generate documents.
+               - FOR GENERATING PDF, WORD, EXCEL, OR POWERPOINT DOCUMENTS (.pdf, .docx, .xlsx, .pptx): ALWAYS invoke the 'create_formatted_document' tool. DO NOT write or execute Python scripts to generate Office documents.
+               - FOR EXCEL: send a markdown table or CSV rows in content so every value becomes an editable native cell.
+               - FOR POWERPOINT: use a concise title plus markdown sections; each ## heading becomes an editable slide with short bullets.
                - FOR A DOCUMENT BASED ON AN UPLOADED MANUAL, SOP, OR REPORT: Ground it in the supplied local knowledge-base results and preserve the real source filename in the document.
                - FOR COMPUTATIONAL SIMULATIONS & CODE EXECUTION: Use 'execute_python_code' (pass code in 'files' map and set 'entryFile').
                - If the user says run, execute, verify, or test Python/code, NEVER stop after 'create_file'. Invoke 'execute_python_code' so the code actually runs in the Docker sandbox.
@@ -79,6 +85,14 @@ public class AgentService {
     private final String provider;
     private final String ollamaBaseUrl;
     private final String externalAiBaseUrl;
+    @Value("${ai.ollama.num-predict:1600}")
+    private int ollamaNumPredict = 1600;
+    @Value("${ai.ollama.num-ctx:4096}")
+    private int ollamaNumCtx = 4096;
+    @Value("${ai.ollama.keep-alive:10m}")
+    private String ollamaKeepAlive = "10m";
+    @Value("${ai.ollama.temperature:0.1}")
+    private double ollamaTemperature = 0.1;
 
     public AgentService(
             @Qualifier("chatClient") ChatClient chatClient,
@@ -132,18 +146,16 @@ public class AgentService {
             ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                     .system(SYSTEM_PROMPT)
                     .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
-                    .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, createDocumentTool, knowledgeSearchTool)
                     .user(effectiveMessage);
+            request = configureTools(request, message);
 
             if ("ollama".equalsIgnoreCase(provider)) {
-                request.options(
-                        OllamaChatOptions.builder()
-                                .model(selectedModel)
-                );
+                request.options(buildOllamaOptions(selectedModel, decision.category()));
             } else if ("nvidia".equalsIgnoreCase(provider)) {
                 request.options(
                         OpenAiChatOptions.builder()
                                 .model(selectedModel)
+                                .maxTokens(ollamaNumPredict)
                 );
             } else {
                 throw new IllegalArgumentException(
@@ -179,13 +191,13 @@ public class AgentService {
                 ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                         .system(SYSTEM_PROMPT)
                         .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
-                        .tools(codeExecutionTool, createFileTool, readFileTool, writeFileTool, listFilesTool, createDocumentTool, knowledgeSearchTool)
                         .user(effectiveMessage);
+                request = configureTools(request, message);
 
                 if ("ollama".equalsIgnoreCase(provider)) {
-                    request.options(OllamaChatOptions.builder().model(selectedModel));
+                    request.options(buildOllamaOptions(selectedModel, decision.category()));
                 } else if ("nvidia".equalsIgnoreCase(provider)) {
-                    request.options(OpenAiChatOptions.builder().model(selectedModel));
+                    request.options(OpenAiChatOptions.builder().model(selectedModel).maxTokens(ollamaNumPredict));
                 } else {
                     throw new IllegalArgumentException("Unsupported AI provider: " + provider);
                 }
@@ -234,6 +246,10 @@ public class AgentService {
 
         ParsedToolCall toolCall = parseSimulatedToolCall(responseText);
         if (toolCall == null) {
+            CodeExecutionRequest recoveredExecution = recoverMalformedPythonToolCall(responseText, userMessage);
+            if (recoveredExecution != null) {
+                return executePythonAndSummarize(recoveredExecution);
+            }
             if (looksLikeToolPayload(responseText)) {
                 return "The local model produced an invalid tool request, so it was not shown as raw JSON. Please retry the task.";
             }
@@ -299,6 +315,50 @@ public class AgentService {
         var result = codeExecutionTool.executePythonCode(codeRequest);
         return "Execution finished with exit code " + result.getExitCode()
                 + ".\n\n" + result.getOutput();
+    }
+
+    private ChatClient.ChatClientRequestSpec configureTools(
+            ChatClient.ChatClientRequestSpec request,
+            String userMessage) {
+        String lower = userMessage == null ? "" : userMessage.toLowerCase();
+
+        if (requiresPythonExecution(userMessage)) {
+            return request.tools(codeExecutionTool);
+        }
+        if (requestsFormattedDocument(lower)) {
+            return request.tools(createDocumentTool);
+        }
+        if (referencesLocalKnowledge(lower)) {
+            return request.tools(knowledgeSearchTool);
+        }
+        if (requestsFileOperation(lower)) {
+            return request.tools(createFileTool, readFileTool, writeFileTool, listFilesTool);
+        }
+        return request;
+    }
+
+    private static boolean requestsFormattedDocument(String lowerMessage) {
+        return lowerMessage.contains(".pdf") || lowerMessage.contains(".docx")
+                || lowerMessage.contains(".xlsx") || lowerMessage.contains(".pptx")
+                || lowerMessage.contains("word document") || lowerMessage.contains("excel")
+                || lowerMessage.contains("spreadsheet") || lowerMessage.contains("powerpoint")
+                || lowerMessage.contains("presentation") || lowerMessage.contains("approval note");
+    }
+
+    private static boolean referencesLocalKnowledge(String lowerMessage) {
+        return lowerMessage.contains("uploaded") || lowerMessage.contains("knowledge base")
+                || lowerMessage.contains("manual") || lowerMessage.contains("sop")
+                || lowerMessage.contains("inspection report");
+    }
+
+    private static boolean requestsFileOperation(String lowerMessage) {
+        boolean fileType = lowerMessage.contains(".py") || lowerMessage.contains(".csv")
+                || lowerMessage.contains(".json") || lowerMessage.contains(".sql")
+                || lowerMessage.contains(".txt");
+        boolean action = lowerMessage.contains("create") || lowerMessage.contains("save")
+                || lowerMessage.contains("write") || lowerMessage.contains("read")
+                || lowerMessage.contains("list");
+        return fileType && action;
     }
 
     private ParsedToolCall parseSimulatedToolCall(String responseText) {
@@ -385,7 +445,8 @@ public class AgentService {
 
     private static boolean isFormattedDocumentPath(String path) {
         String lower = path == null ? "" : path.toLowerCase();
-        return lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx");
+        return lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx")
+                || lower.endsWith(".xlsx") || lower.endsWith(".pptx");
     }
 
     private static boolean looksLikePythonSource(String path, String content) {
@@ -403,6 +464,56 @@ public class AgentService {
         int slash = normalized.lastIndexOf('/');
         String fileName = slash >= 0 ? normalized.substring(slash + 1) : normalized;
         return fileName.toLowerCase().endsWith(".py") ? fileName : "main.py";
+    }
+
+    private static CodeExecutionRequest recoverMalformedPythonToolCall(String responseText, String userMessage) {
+        if (!requiresPythonExecution(userMessage) || responseText == null
+                || !looksLikeToolPayload(responseText)) {
+            return null;
+        }
+
+        Matcher fencedCode = Pattern.compile("```(?:python)?\\s*(.*?)```", Pattern.CASE_INSENSITIVE | Pattern.DOTALL)
+                .matcher(responseText);
+        if (fencedCode.find() && !fencedCode.group(1).isBlank()) {
+            return new CodeExecutionRequest("python", Map.of("main.py", fencedCode.group(1).trim()), "main.py");
+        }
+
+        Matcher entryMatcher = Pattern.compile("[\"']entryFile[\"']\\s*:\\s*[\"']([^\"']+\\.py)[\"']", Pattern.CASE_INSENSITIVE)
+                .matcher(responseText);
+        String entryFile = entryMatcher.find() ? simpleEntryFile(entryMatcher.group(1)) : "main.py";
+        Matcher pathMatcher = Pattern.compile("[\"']path[\"']\\s*:\\s*[\"']([^\"']+\\.py)[\"']", Pattern.CASE_INSENSITIVE)
+                .matcher(responseText);
+        if (pathMatcher.find()) entryFile = simpleEntryFile(pathMatcher.group(1));
+        int entryMarker = responseText.lastIndexOf("\"entryFile\"");
+        String fileRegion = entryMarker > 0 ? responseText.substring(0, entryMarker) : responseText;
+
+        Matcher fileMatcher = Pattern.compile("[\"']([^\"']+\\.py)[\"']\\s*:\\s*[\"']", Pattern.CASE_INSENSITIVE)
+                .matcher(fileRegion);
+        int codeStart = -1;
+        while (fileMatcher.find()) {
+            entryFile = simpleEntryFile(fileMatcher.group(1));
+            codeStart = fileMatcher.end();
+        }
+        if (codeStart < 0) {
+            Matcher contentMatcher = Pattern.compile("[\"']content[\"']\\s*:\\s*[\"']", Pattern.CASE_INSENSITIVE)
+                    .matcher(fileRegion);
+            if (contentMatcher.find()) codeStart = contentMatcher.end();
+        }
+        if (codeStart < 0) return null;
+
+        int codeEnd = fileRegion.lastIndexOf('"');
+        if (codeEnd <= codeStart) codeEnd = fileRegion.lastIndexOf('\'');
+        if (codeEnd <= codeStart) return null;
+
+        String code = fileRegion.substring(codeStart, codeEnd)
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\")
+                .trim();
+        if (!looksLikePythonSource(entryFile, code)) return null;
+        return new CodeExecutionRequest("python", Map.of(entryFile, code), entryFile);
     }
 
     private record ParsedToolCall(String name, JsonNode parameters) {
@@ -594,6 +705,11 @@ public class AgentService {
         boolean requestsDocument = lowerMessage.contains("approval note")
                 || lowerMessage.contains("word")
                 || lowerMessage.contains(".docx")
+                || lowerMessage.contains(".xlsx")
+                || lowerMessage.contains(".pptx")
+                || lowerMessage.contains("excel")
+                || lowerMessage.contains("powerpoint")
+                || lowerMessage.contains("presentation")
                 || lowerMessage.contains("pdf")
                 || lowerMessage.contains("document");
 
@@ -621,6 +737,19 @@ public class AgentService {
     private void recordModelRequest(String selectedModel) {
         String endpoint = "ollama".equalsIgnoreCase(provider) ? ollamaBaseUrl : externalAiBaseUrl;
         networkAuditService.record("MODEL", endpoint, "chat · " + selectedModel);
+    }
+
+    private OllamaChatOptions.Builder buildOllamaOptions(String selectedModel, String category) {
+        int responseTokenLimit = "CALCULATION_REASONING".equals(category)
+                ? Math.min(ollamaNumPredict, 600)
+                : ollamaNumPredict;
+        OllamaChatOptions.Builder builder = OllamaChatOptions.builder();
+        builder.model(selectedModel)
+                .temperature(ollamaTemperature)
+                .numPredict(responseTokenLimit)
+                .numCtx(ollamaNumCtx)
+                .keepAlive(ollamaKeepAlive);
+        return builder;
     }
 
     private String ensureKnowledgeCitations(String responseText) {

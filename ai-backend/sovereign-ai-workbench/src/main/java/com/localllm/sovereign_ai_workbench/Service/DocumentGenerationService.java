@@ -18,12 +18,36 @@ import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextBox;
+import org.apache.poi.xslf.usermodel.XSLFTextParagraph;
+import org.apache.poi.xslf.usermodel.XSLFTextRun;
+import org.apache.poi.xssf.usermodel.XSSFCell;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFFont;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.geom.Rectangle2D;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -236,6 +260,334 @@ public class DocumentGenerationService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate DOCX document: " + e.getMessage(), e);
         }
+    }
+
+    public byte[] generateXlsx(String title, String content) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Report");
+            sheet.setDisplayGridlines(false);
+            sheet.setAutobreaks(true);
+
+            List<List<String>> table = parseSpreadsheetRows(content);
+            int columnCount = Math.max(2, table.stream().mapToInt(List::size).max().orElse(2));
+
+            Row titleRow = sheet.createRow(0);
+            titleRow.setHeightInPoints(27);
+            XSSFCell titleCell = (XSSFCell) titleRow.createCell(0);
+            titleCell.setCellValue(title != null && !title.isBlank() ? title : "MRPL Technical Workbook");
+            titleCell.setCellStyle(createTitleCellStyle(workbook));
+
+            Row contextRow = sheet.createRow(1);
+            XSSFCell contextCell = (XSSFCell) contextRow.createCell(0);
+            contextCell.setCellValue("Generated locally by Nexus Sovereign AI · "
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+            contextCell.setCellStyle(createContextCellStyle(workbook));
+
+            int tableStart = 3;
+            CellStyle headerStyle = createHeaderCellStyle(workbook);
+            CellStyle bodyStyle = createBodyCellStyle(workbook, false);
+            CellStyle alternateStyle = createBodyCellStyle(workbook, true);
+            CellStyle highRiskStyle = createRiskCellStyle(workbook, new Color(254, 226, 226), new Color(153, 27, 27));
+            CellStyle mediumRiskStyle = createRiskCellStyle(workbook, new Color(254, 243, 199), new Color(146, 64, 14));
+
+            for (int rowIndex = 0; rowIndex < table.size(); rowIndex++) {
+                Row row = sheet.createRow(tableStart + rowIndex);
+                row.setHeightInPoints(rowIndex == 0 ? 25 : 22);
+                List<String> values = table.get(rowIndex);
+                for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+                    XSSFCell cell = (XSSFCell) row.createCell(columnIndex);
+                    String value = columnIndex < values.size() ? values.get(columnIndex).trim() : "";
+                    setTypedCellValue(cell, value);
+                    if (rowIndex == 0) {
+                        cell.setCellStyle(headerStyle);
+                    } else {
+                        String lower = value.toLowerCase(Locale.ROOT);
+                        if (lower.equals("high") || lower.equals("critical")) {
+                            cell.setCellStyle(highRiskStyle);
+                        } else if (lower.equals("medium")) {
+                            cell.setCellStyle(mediumRiskStyle);
+                        } else {
+                            cell.setCellStyle(rowIndex % 2 == 0 ? alternateStyle : bodyStyle);
+                        }
+                    }
+                }
+            }
+
+            if (!table.isEmpty()) {
+                sheet.createFreezePane(0, tableStart + 1);
+                sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
+                        tableStart, tableStart + table.size() - 1, 0, columnCount - 1));
+            }
+            for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+                sheet.autoSizeColumn(columnIndex);
+                int boundedWidth = Math.min(Math.max(sheet.getColumnWidth(columnIndex) + 768, 12 * 256), 45 * 256);
+                sheet.setColumnWidth(columnIndex, boundedWidth);
+            }
+            sheet.getPrintSetup().setLandscape(columnCount > 5);
+            sheet.setFitToPage(true);
+            sheet.getPrintSetup().setFitWidth((short) 1);
+            sheet.getPrintSetup().setFitHeight((short) 0);
+
+            workbook.getProperties().getCoreProperties().setTitle(title);
+            workbook.getProperties().getCoreProperties().setCreator("Nexus Sovereign AI Workbench");
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate Excel workbook: " + e.getMessage(), e);
+        }
+    }
+
+    public byte[] generatePptx(String title, String content) {
+        try (XMLSlideShow presentation = new XMLSlideShow(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            presentation.setPageSize(new Dimension(960, 540));
+            String deckTitle = title != null && !title.isBlank() ? title : "MRPL Technical Presentation";
+
+            XSLFSlide cover = presentation.createSlide();
+            setSlideBackground(cover);
+            addTextBox(cover, deckTitle, 70, 142, 820, 125, 42, true, new Color(26, 54, 93));
+            addTextBox(cover, "Sovereign AI Workbench · On-premise generated deliverable", 72, 278, 815, 45, 16, false, new Color(90, 102, 116));
+            addFooter(cover, 1);
+
+            List<SlideSection> sections = parseSlideSections(deckTitle, content);
+            int slideNumber = 2;
+            for (SlideSection section : sections) {
+                List<String> items = section.items().isEmpty() ? List.of("Content supplied in the request") : section.items();
+                for (int start = 0; start < items.size(); start += 6) {
+                    List<String> pageItems = items.subList(start, Math.min(start + 6, items.size()));
+                    String slideTitle = start == 0 ? section.title() : section.title() + " (continued)";
+                    XSLFSlide slide = presentation.createSlide();
+                    setSlideBackground(slide);
+                    addTextBox(slide, slideTitle, 64, 42, 832, 64, 32, true, new Color(26, 54, 93));
+                    addBulletBox(slide, pageItems, 78, 125, 800, 335);
+                    addFooter(slide, slideNumber++);
+                }
+            }
+
+            presentation.getProperties().getCoreProperties().setTitle(deckTitle);
+            presentation.getProperties().getCoreProperties().setCreator("Nexus Sovereign AI Workbench");
+            presentation.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PowerPoint presentation: " + e.getMessage(), e);
+        }
+    }
+
+    private static List<List<String>> parseSpreadsheetRows(String content) {
+        List<String> lines = Arrays.stream((content == null ? "" : content).split("\\R"))
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .toList();
+        List<List<String>> markdownRows = new ArrayList<>();
+        for (String line : lines) {
+            if (!line.contains("|") || line.matches("^\\|?[\\s:|\\-]+\\|?$")) continue;
+            String normalized = line.replaceAll("^\\|", "").replaceAll("\\|$", "");
+            markdownRows.add(Arrays.stream(normalized.split("\\|", -1)).map(String::trim).toList());
+        }
+        if (markdownRows.size() >= 2) return markdownRows;
+
+        List<List<String>> csvRows = new ArrayList<>();
+        for (String line : lines) {
+            if (line.contains(",") && !line.startsWith("#")) csvRows.add(parseCsvLine(line));
+        }
+        if (csvRows.size() >= 2) return csvRows;
+
+        List<List<String>> structured = new ArrayList<>();
+        structured.add(List.of("Section", "Details"));
+        String section = "Overview";
+        for (String line : lines) {
+            if (line.startsWith("#")) {
+                section = cleanMarkup(line.replaceFirst("^#+\\s*", ""));
+            } else if (!line.matches("^[=\\-]{3,}$")) {
+                structured.add(List.of(section, cleanMarkup(line.replaceFirst("^([\\-*•]|\\d+[.)])\\s+", ""))));
+            }
+        }
+        if (structured.size() == 1) structured.add(List.of("Overview", "No structured rows were supplied."));
+        return structured;
+    }
+
+    private static List<String> parseCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean quoted = false;
+        for (int index = 0; index < line.length(); index++) {
+            char value = line.charAt(index);
+            if (value == '"') {
+                if (quoted && index + 1 < line.length() && line.charAt(index + 1) == '"') {
+                    current.append('"');
+                    index++;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (value == ',' && !quoted) {
+                values.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(value);
+            }
+        }
+        values.add(current.toString().trim());
+        return values;
+    }
+
+    private static void setTypedCellValue(XSSFCell cell, String value) {
+        if (value.matches("[-+]?\\d+(\\.\\d+)?")) {
+            try {
+                cell.setCellValue(Double.parseDouble(value));
+                return;
+            } catch (NumberFormatException ignored) {
+                // Keep unusually large numbers as text.
+            }
+        }
+        cell.setCellValue(cleanMarkup(value));
+    }
+
+    private static XSSFCellStyle createTitleCellStyle(XSSFWorkbook workbook) {
+        XSSFCellStyle style = workbook.createCellStyle();
+        XSSFFont font = workbook.createFont();
+        font.setFontName("Arial");
+        font.setFontHeightInPoints((short) 18);
+        font.setBold(true);
+        font.setColor(new XSSFColor(new Color(26, 54, 93), null));
+        style.setFont(font);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private static XSSFCellStyle createContextCellStyle(XSSFWorkbook workbook) {
+        XSSFCellStyle style = workbook.createCellStyle();
+        XSSFFont font = workbook.createFont();
+        font.setFontName("Arial");
+        font.setFontHeightInPoints((short) 9);
+        font.setItalic(true);
+        font.setColor(new XSSFColor(new Color(113, 128, 150), null));
+        style.setFont(font);
+        return style;
+    }
+
+    private static XSSFCellStyle createHeaderCellStyle(XSSFWorkbook workbook) {
+        XSSFCellStyle style = workbook.createCellStyle();
+        XSSFFont font = workbook.createFont();
+        font.setFontName("Arial");
+        font.setFontHeightInPoints((short) 10);
+        font.setBold(true);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        style.setFont(font);
+        style.setFillForegroundColor(new XSSFColor(new Color(26, 54, 93), null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setWrapText(true);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBottomBorderColor(IndexedColors.WHITE.getIndex());
+        return style;
+    }
+
+    private static XSSFCellStyle createBodyCellStyle(XSSFWorkbook workbook, boolean alternate) {
+        XSSFCellStyle style = workbook.createCellStyle();
+        XSSFFont font = workbook.createFont();
+        font.setFontName("Arial");
+        font.setFontHeightInPoints((short) 10);
+        font.setColor(new XSSFColor(new Color(45, 55, 72), null));
+        style.setFont(font);
+        if (alternate) {
+            style.setFillForegroundColor(new XSSFColor(new Color(247, 249, 252), null));
+            style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        }
+        style.setVerticalAlignment(VerticalAlignment.TOP);
+        style.setWrapText(true);
+        style.setBorderBottom(BorderStyle.HAIR);
+        style.setBottomBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        return style;
+    }
+
+    private static XSSFCellStyle createRiskCellStyle(XSSFWorkbook workbook, Color fill, Color text) {
+        XSSFCellStyle style = createBodyCellStyle(workbook, false);
+        XSSFFont font = workbook.createFont();
+        font.setFontName("Arial");
+        font.setFontHeightInPoints((short) 10);
+        font.setBold(true);
+        font.setColor(new XSSFColor(text, null));
+        style.setFont(font);
+        style.setFillForegroundColor(new XSSFColor(fill, null));
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    private static List<SlideSection> parseSlideSections(String deckTitle, String content) {
+        List<SlideSection> sections = new ArrayList<>();
+        String currentTitle = "Overview";
+        List<String> currentItems = new ArrayList<>();
+        for (String rawLine : (content == null ? "" : content).split("\\R")) {
+            String line = rawLine.trim();
+            if (line.isBlank() || line.matches("^[=\\-]{3,}$")) continue;
+            if (line.startsWith("#")) {
+                String heading = cleanMarkup(line.replaceFirst("^#+\\s*", ""));
+                if (heading.equalsIgnoreCase(deckTitle) && sections.isEmpty() && currentItems.isEmpty()) continue;
+                if (!currentItems.isEmpty()) {
+                    sections.add(new SlideSection(currentTitle, List.copyOf(currentItems)));
+                    currentItems.clear();
+                }
+                currentTitle = heading.isBlank() ? "Overview" : heading;
+            } else {
+                String item = cleanMarkup(line.replaceFirst("^([\\-*•]|\\d+[.)])\\s+", ""));
+                if (!item.isBlank()) currentItems.add(item);
+            }
+        }
+        if (!currentItems.isEmpty()) sections.add(new SlideSection(currentTitle, List.copyOf(currentItems)));
+        if (sections.isEmpty()) sections.add(new SlideSection("Overview", List.of("No detailed slide content was supplied.")));
+        return sections;
+    }
+
+    private static void setSlideBackground(XSLFSlide slide) {
+        slide.getBackground().setFillColor(new Color(248, 250, 252));
+    }
+
+    private static void addTextBox(XSLFSlide slide, String text, double x, double y, double width, double height,
+                                   double fontSize, boolean bold, Color color) {
+        XSLFTextBox box = slide.createTextBox();
+        box.setAnchor(new Rectangle2D.Double(x, y, width, height));
+        box.setText(cleanMarkup(text));
+        box.setWordWrap(true);
+        for (XSLFTextParagraph paragraph : box.getTextParagraphs()) {
+            paragraph.setSpaceAfter(0d);
+            for (XSLFTextRun run : paragraph.getTextRuns()) {
+                run.setFontFamily("Arial");
+                run.setFontSize(fontSize);
+                run.setBold(bold);
+                run.setFontColor(color);
+            }
+        }
+    }
+
+    private static void addBulletBox(XSLFSlide slide, List<String> items, double x, double y, double width, double height) {
+        XSLFTextBox body = slide.createTextBox();
+        body.setAnchor(new Rectangle2D.Double(x, y, width, height));
+        body.setWordWrap(true);
+        body.clearText();
+        for (String item : items) {
+            XSLFTextParagraph paragraph = body.addNewTextParagraph();
+            paragraph.setBullet(true);
+            paragraph.setLeftMargin(22d);
+            paragraph.setIndent(-10d);
+            paragraph.setSpaceAfter(12d);
+            XSLFTextRun run = paragraph.addNewTextRun();
+            run.setText(cleanMarkup(item));
+            run.setFontFamily("Arial");
+            run.setFontSize(18d);
+            run.setFontColor(new Color(45, 55, 72));
+        }
+    }
+
+    private static void addFooter(XSLFSlide slide, int slideNumber) {
+        addTextBox(slide, "Nexus Sovereign AI · Local artifact", 64, 500, 500, 20, 9, false, new Color(113, 128, 150));
+        addTextBox(slide, String.valueOf(slideNumber), 855, 500, 40, 20, 9, false, new Color(113, 128, 150));
+    }
+
+    private static String cleanMarkup(String text) {
+        return text == null ? "" : text.replace("**", "").replace("`", "").replace("__", "").trim();
+    }
+
+    private record SlideSection(String title, List<String> items) {
     }
 
     private void appendFormattedPdfChunks(Paragraph paragraph, String text) {

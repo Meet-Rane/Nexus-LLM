@@ -51,6 +51,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
+.auth-field { display: flex; height: 42px; align-items: center; border: 1px solid var(--color-line-bright); border-radius: 9px; background: var(--color-base); padding: 0 12px; transition: border-color 150ms ease; }
+.auth-field:focus-within { border-color: rgba(230,167,74,.55); box-shadow: 0 0 0 3px rgba(230,167,74,.045); }
+.auth-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text); font-size: 12.5px; }
+
 :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-accent) 80%, white);
   outline-offset: 2px;
@@ -214,6 +218,7 @@ button:disabled { cursor: not-allowed; }
 .step-dot { display: flex; width: 18px; height: 18px; flex-shrink: 0; align-items: center; justify-content: center; border: 1px solid var(--color-line); border-radius: 99px; font-family: var(--font-mono); font-size: 8px; }
 .step-done { border-color: rgba(89,195,174,.22); background: rgba(89,195,174,.08); color: var(--color-teal); }
 .step-active { border-color: rgba(230,167,74,.25); background: rgba(230,167,74,.09); color: var(--color-accent); animation: pulse-soft 1.6s ease-in-out infinite; }
+.step-error { border-color: rgba(225,111,104,.25); background: rgba(225,111,104,.08); color: var(--color-danger); }
 .step-waiting { color: var(--color-faint); }
 .toggle { position: relative; width: 34px; height: 20px; flex-shrink: 0; border: 1px solid var(--color-line-bright); border-radius: 99px; background: var(--color-panel-3); transition: 150ms ease; }
 .toggle span { position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 99px; background: var(--color-muted); transition: 150ms ease; }

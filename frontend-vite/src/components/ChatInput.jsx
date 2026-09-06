@@ -73,7 +73,7 @@ export function ChatInput({ onSend, loading, compact = false }) {
             {ingesting ? <LoaderCircle size={15} className="animate-spin" /> : <FileUp size={15} />}
             <span className="hidden sm:inline">Attach</span>
           </button>
-          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.txt,.docx,.xlsx" className="hidden" onChange={handleFileUpload} />
+          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp,.txt,.docx,.xlsx,.xlsm" className="hidden" onChange={handleFileUpload} />
           <span className="hidden items-center gap-1.5 px-2 text-[10px] font-medium text-muted md:flex"><ShieldCheck size={12} className="text-teal" /> processed on-device</span>
         </div>
         <button type="button" onClick={handleSend} disabled={loading || !text.trim()} className="send-button" aria-label="Run task">

@@ -1,0 +1,5 @@
+Nexus demo maintenance instruction
+
+Before servicing pump P-101, isolate the electrical supply and close both process valves.
+The supervisor must verify zero energy and record the lockout/tagout permit number.
+Any seal leakage rated high risk requires corrective action before restart.

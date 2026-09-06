@@ -8,6 +8,37 @@ const agentClient = axios.create({ baseURL: AGENT_URL, timeout: 300000 });
 const ragClient = axios.create({ baseURL: RAG_URL, timeout: 600000 });
 
 const CONVERSATION_KEY = "nexus.activeConversationId";
+const AUTH_KEY = "nexus.authSession";
+
+export function getStoredAuth() {
+  try {
+    return JSON.parse(window.localStorage.getItem(AUTH_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function storeAuth(auth) {
+  if (auth) window.localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+  else window.localStorage.removeItem(AUTH_KEY);
+}
+
+agentClient.interceptors.request.use((config) => {
+  const token = getStoredAuth()?.accessToken;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+agentClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && !error?.config?.url?.startsWith("/api/auth/")) {
+      storeAuth(null);
+      window.dispatchEvent(new Event("nexus:unauthorized"));
+    }
+    return Promise.reject(error);
+  },
+);
 
 export function getConversationId() {
   let conversationId = window.sessionStorage.getItem(CONVERSATION_KEY);
@@ -51,7 +82,10 @@ export async function streamMessage(text, { conversationId = getConversationId()
   try {
     const response = await fetch(url, {
       method: "GET",
-      headers: { Accept: "text/event-stream" },
+      headers: {
+        Accept: "text/event-stream",
+        ...(getStoredAuth()?.accessToken ? { Authorization: `Bearer ${getStoredAuth().accessToken}` } : {}),
+      },
       signal: controller.signal,
     });
 
@@ -114,6 +148,21 @@ export async function pingAgent() {
   return data;
 }
 
+export async function login(credentials) {
+  const { data } = await agentClient.post("/api/auth/login", credentials);
+  return data;
+}
+
+export async function signup(account) {
+  const { data } = await agentClient.post("/api/auth/signup", account);
+  return data;
+}
+
+export async function getCurrentUser() {
+  const { data } = await agentClient.get("/api/auth/me");
+  return data;
+}
+
 export async function getSystemStatus() {
   const { data } = await agentClient.get("/api/system/status");
   return data;
@@ -141,6 +190,16 @@ export async function getRagStatus() {
   return data;
 }
 
+export async function listDocuments() {
+  const { data } = await ragClient.get("/ingest/documents");
+  return data;
+}
+
+export async function deleteDocument(source) {
+  const { data } = await ragClient.delete("/ingest/documents", { params: { source } });
+  return data;
+}
+
 export async function retrieveKnowledge(query, topK = 5) {
   const { data } = await ragClient.get("/retrieve", { params: { query, top_k: topK } });
   return data;
@@ -158,10 +217,19 @@ export async function getArtifactContent(path, conversationId = getConversationI
   return data;
 }
 
-export function getArtifactDownloadUrl(path, conversationId = getConversationId()) {
-  const url = new URL(`/api/conversations/${encodeURIComponent(conversationId)}/artifacts/download`, AGENT_URL);
-  url.searchParams.set("path", path);
-  return url.toString();
+export async function downloadArtifact(path, conversationId = getConversationId(), fileName) {
+  const response = await agentClient.get(`/api/conversations/${encodeURIComponent(conversationId)}/artifacts/download`, {
+    params: { path },
+    responseType: "blob",
+  });
+  const objectUrl = window.URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fileName || path.split(/[\\/]/).pop() || "artifact";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(objectUrl);
 }
 
 export default agentClient;

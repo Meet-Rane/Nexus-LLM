@@ -3,6 +3,7 @@ package com.localllm.sovereign_ai_workbench.jwtauth.config;
 import com.localllm.sovereign_ai_workbench.jwtauth.security.jwt.AuthEntryPointJwt;
 import com.localllm.sovereign_ai_workbench.jwtauth.security.jwt.AuthTokenFilter;
 import com.localllm.sovereign_ai_workbench.jwtauth.security.services.UserDetailsServiceImpl;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -69,10 +70,12 @@ public class WebSecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/ai/**").permitAll()
-                        .requestMatchers("/api/conversations/**").permitAll()
-                        .requestMatchers("/api/system/**").permitAll()
+                        .requestMatchers("/ai/health").permitAll()
+                        .requestMatchers("/api/system/network-audit").hasRole("ADMIN")
+                        .requestMatchers("/sandbox/**").hasRole("ADMIN")
+                        .requestMatchers("/ai/**", "/api/conversations/**", "/api/system/status").authenticated()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 );

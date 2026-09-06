@@ -49,4 +49,12 @@ class ModelRouterTests {
         assertEquals("DOCUMENT_APPROVAL", decision.category());
         assertEquals("llama3.1:8b", decision.model());
     }
+
+    @Test
+    void routesNativeExcelDatasetToDocumentModelBeforeCodingKeywords() {
+        RouteDecision decision = router.selectModel("test", "Create an Excel dataset as refinery_risks.xlsx");
+
+        assertEquals("DOCUMENT_APPROVAL", decision.category());
+        assertEquals("llama3.1:8b", decision.model());
+    }
 }

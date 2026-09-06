@@ -18,10 +18,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -72,6 +74,7 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
+    @Transactional
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
         if (userRepository.existsByUsername(signUpRequest.getUsername())) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
@@ -86,38 +89,34 @@ public class AuthController {
                 signUpRequest.getEmail(),
                 encoder.encode(signUpRequest.getPassword()));
 
-        Set<String> strRoles = signUpRequest.getRole();
         Set<Role> roles = new HashSet<>();
-
-        if (strRoles == null || strRoles.isEmpty()) {
-            Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                    .orElseThrow(() -> new RuntimeException("Error: Role USER is not found. Did you seed the roles table?"));
-            roles.add(userRole);
-        } else {
-            strRoles.forEach(role -> {
-                switch (role.toLowerCase()) {
-                    case "admin":
-                        Role adminRole = roleRepository.findByName(ERole.ROLE_ADMIN)
-                                .orElseThrow(() -> new RuntimeException("Error: Role ADMIN is not found."));
-                        roles.add(adminRole);
-                        break;
-                    case "mod":
-                    case "moderator":
-                        Role modRole = roleRepository.findByName(ERole.ROLE_MODERATOR)
-                                .orElseThrow(() -> new RuntimeException("Error: Role MODERATOR is not found."));
-                        roles.add(modRole);
-                        break;
-                    default:
-                        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
-                                .orElseThrow(() -> new RuntimeException("Error: Role USER is not found."));
-                        roles.add(userRole);
-                }
-            });
-        }
+        boolean firstAccount = userRepository.count() == 0;
+        ERole assignedRole = firstAccount ? ERole.ROLE_ADMIN : ERole.ROLE_USER;
+        roles.add(roleRepository.findByName(assignedRole)
+                .orElseThrow(() -> new RuntimeException("Error: Required role is not initialized.")));
 
         user.setRoles(roles);
         userRepository.save(user);
 
-        return ResponseEntity.ok(new MessageResponse("User registered successfully!"));
+        String message = firstAccount
+                ? "Administrator account created successfully."
+                : "Operator account created successfully.";
+        return ResponseEntity.ok(new MessageResponse(message));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> currentUser(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserDetailsImpl userDetails)) {
+            return ResponseEntity.status(401).body(new MessageResponse("Authentication required."));
+        }
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
+                .toList();
+        return ResponseEntity.ok(Map.of(
+                "id", userDetails.getId(),
+                "username", userDetails.getUsername(),
+                "email", userDetails.getEmail(),
+                "roles", roles
+        ));
     }
 }

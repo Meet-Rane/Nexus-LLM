@@ -173,4 +173,56 @@ class AgentServiceTests {
         verify(chatMemory).clear("history-test");
         verify(chatMemory).add(eq("history-test"), anyList());
     }
+
+    @Test
+    void recoversPythonWhenModelLeavesInnerJsonQuotesUnescaped() {
+        CodeExecutionTool codeTool = mock(CodeExecutionTool.class);
+        when(codeTool.executePythonCode(any(CodeExecutionRequest.class)))
+                .thenReturn(new CodeExecutionResult(0, "SANDBOX_TEST_PASSED\n", false,
+                        List.of("output/demo_verification.json")));
+
+        AgentService service = new AgentService(
+                null, null, null, codeTool, null, null, null, null,
+                null, null, null,
+                "ollama", "http://localhost:11434", "http://localhost:1234"
+        );
+
+        String malformed = """
+                {"name":"execute_python_code","parameters":{"language":"python","files":{"main.py":"import json\\npayload = {"total": 100, "verified": True}\\nprint("SANDBOX_TEST_PASSED")"},"entryFile":"main.py"}}
+                """;
+
+        String result = service.handleTextSimulatedToolCalls(
+                "test-conversation", malformed, "Create and execute a Python script in the sandbox."
+        );
+
+        ArgumentCaptor<CodeExecutionRequest> requestCaptor = ArgumentCaptor.forClass(CodeExecutionRequest.class);
+        verify(codeTool).executePythonCode(requestCaptor.capture());
+        assertTrue(requestCaptor.getValue().getFiles().get("main.py").contains("\"total\": 100"));
+        assertTrue(result.contains("SANDBOX_TEST_PASSED"));
+    }
+
+    @Test
+    void recoversMalformedCreateFileAsExecutionWhenRunWasRequested() {
+        CodeExecutionTool codeTool = mock(CodeExecutionTool.class);
+        when(codeTool.executePythonCode(any(CodeExecutionRequest.class)))
+                .thenReturn(new CodeExecutionResult(0, "SANDBOX_TEST_PASSED\n", false, List.of()));
+
+        AgentService service = new AgentService(
+                null, null, null, codeTool, null, null, null, null,
+                null, null, null,
+                "ollama", "http://localhost:11434", "http://localhost:1234"
+        );
+
+        String malformed = """
+                {"name":"create_file","arguments":{"path":"verify.py","content":"payload = {"total": 100}\\nprint("SANDBOX_TEST_PASSED")"}}
+                """;
+        String result = service.handleTextSimulatedToolCalls(
+                "test-conversation", malformed, "Run and verify this Python script in Docker."
+        );
+
+        ArgumentCaptor<CodeExecutionRequest> requestCaptor = ArgumentCaptor.forClass(CodeExecutionRequest.class);
+        verify(codeTool).executePythonCode(requestCaptor.capture());
+        assertEquals("verify.py", requestCaptor.getValue().getEntryFile());
+        assertTrue(result.contains("exit code 0"));
+    }
 }

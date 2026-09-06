@@ -25,19 +25,19 @@ public class CreateDocumentTool {
     @Tool(
         name = "create_formatted_document",
         description = """
-            Create a beautifully styled, professionally formatted PDF or Word document from structured text.
+            Create a professionally formatted native PDF, Word, Excel, or PowerPoint deliverable from structured text.
 
-            Use this tool WHENEVER the user asks to generate, export, or draft a PDF or Word (.docx) document, approval note, inspection report, or technical guide.
+            Use this tool WHENEVER the user asks to generate or export PDF, Word (.docx), Excel (.xlsx), or PowerPoint (.pptx) output.
 
             Parameters:
-            - path: filename ending in '.pdf' or '.docx' (e.g. 'reboiler_maintenance_guide.pdf' or 'pump_approval_note.docx')
+            - path: filename ending in '.pdf', '.docx', '.xlsx', or '.pptx'
             - title: executive title of the document (e.g. 'MRPL Reboiler Maintenance & Overhaul Guide')
-            - content: the complete text body with markdown headings (# Heading 1, ## Heading 2), paragraphs, and bullet lists (- Step 1)
+            - content: complete content using markdown headings and bullets. For Excel, provide a markdown table or CSV rows. For PowerPoint, use one ## heading per slide followed by concise bullet lines.
 
             Advantages of this tool:
-            - Automatic industrial page margins and word wrapping (text is never truncated at margins)
-            - Professional navy title banners, page numbering, and clean typography
-            - Generates both native PDF (.pdf) and Word (.docx) files.
+            - Native editable Word paragraphs, Excel cells, and PowerPoint slide text
+            - Professional industrial styling and safe local artifact storage
+            - No Python or cloud conversion service is required
             """
     )
     public String createFormattedDocument(CreateDocumentRequest request) {
@@ -89,6 +89,10 @@ public class CreateDocumentTool {
             byte[] bytes;
             if (lowerPath.endsWith(".docx")) {
                 bytes = documentGenerationService.generateDocx(title, content);
+            } else if (lowerPath.endsWith(".xlsx")) {
+                bytes = documentGenerationService.generateXlsx(title, content);
+            } else if (lowerPath.endsWith(".pptx")) {
+                bytes = documentGenerationService.generatePptx(title, content);
             } else {
                 if (!lowerPath.endsWith(".pdf")) {
                     path = path + ".pdf";

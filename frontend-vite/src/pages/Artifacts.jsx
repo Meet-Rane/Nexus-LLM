@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Code2, Download, Eye, FileOutput, FileSpreadsheet, FileText, Presentation, Search, SlidersHorizontal } from "lucide-react";
 import { Badge, Page, Stat } from "../components/Ui";
-import { getArtifactContent, getArtifactDownloadUrl, listArtifacts } from "../api/client";
+import { downloadArtifact, getArtifactContent, listArtifacts } from "../api/client";
 
 export default function Artifacts() {
   const [artifacts, setArtifacts] = useState([]);
@@ -60,7 +60,7 @@ export default function Artifacts() {
           <div className="panel-header"><div><p className="eyebrow">Quick preview</p><h2 className="panel-title mt-1">{selected?.fileName || "Select an artifact"}</h2></div><Eye size={16} className="text-muted" /></div>
           <div className="p-4">
             {content ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-base p-3 font-mono text-[10px] leading-5 text-muted">{content.content}</pre> : <div className="artifact-preview flex items-center justify-center text-xs text-muted">Choose a generated file to preview it.</div>}
-            {selected && <><div className="mt-4 space-y-2"><Detail label="Format" value={selected.artifactType} /><Detail label="Size" value={formatBytes(selected.fileSize)} /><Detail label="Classification" value="LOCAL" accent /></div><a href={getArtifactDownloadUrl(selected.path, selected.conversationId)} className="primary-button mt-4 w-full"><Download size={13} /> Download</a></>}
+            {selected && <><div className="mt-4 space-y-2"><Detail label="Format" value={selected.artifactType} /><Detail label="Size" value={formatBytes(selected.fileSize)} /><Detail label="Classification" value="LOCAL" accent /></div><button type="button" onClick={() => downloadArtifact(selected.path, selected.conversationId, selected.fileName)} className="primary-button mt-4 w-full"><Download size={13} /> Download</button></>}
           </div>
         </aside>
       </div>

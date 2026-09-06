@@ -15,6 +15,28 @@ $startedProcesses = @()
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $ragRoot ".runtime\chroma") | Out-Null
 
+# Preserve valid process records when this command is run while Nexus is already online.
+# Without this, a second start used to replace the state file with an empty array,
+# leaving stop-nexus.ps1 unable to stop the services it originally launched.
+if (Test-Path -LiteralPath $statePath) {
+    $savedProcesses = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    foreach ($record in $savedProcesses) {
+        try {
+            $process = Get-Process -Id ([int]$record.id) -ErrorAction SilentlyContinue
+            if ($null -eq $process) { continue }
+
+            $actualStart = $process.StartTime.ToUniversalTime()
+            $savedStart = ([DateTimeOffset]$record.startedAtUtc).UtcDateTime
+            if ($process.ProcessName -eq $record.processName -and [Math]::Abs(($actualStart - $savedStart).TotalMilliseconds) -lt 1) {
+                $startedProcesses += $record
+            }
+        }
+        catch {
+            Write-Warning "Skipped an invalid Nexus process record: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Test-NexusEndpoint {
     param([Parameter(Mandatory)][string]$Url)
 
@@ -30,6 +52,32 @@ function Test-NexusEndpoint {
 function Save-NexusState {
     ConvertTo-Json -InputObject @($script:startedProcesses) -Depth 4 |
         Set-Content -LiteralPath $statePath -Encoding UTF8
+}
+
+function Add-NexusListeningProcess {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][int]$Port
+    )
+
+    try {
+        $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop |
+            Select-Object -First 1
+        if ($null -eq $connection) { return }
+
+        $process = Get-Process -Id ([int]$connection.OwningProcess) -ErrorAction Stop
+        if ($startedProcesses | Where-Object { $_.id -eq $process.Id -or $_.label -eq $Label }) { return }
+
+        $script:startedProcesses += [pscustomobject]@{
+            label = $Label
+            id = $process.Id
+            processName = $process.ProcessName
+            startedAtUtc = $process.StartTime.ToUniversalTime().ToString("o")
+        }
+    }
+    catch {
+        Write-Warning "Could not track the existing $Label process on port ${Port}: $($_.Exception.Message)"
+    }
 }
 
 function Start-NexusProcess {
@@ -87,6 +135,33 @@ if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:11434/api/tags")) {
 }
 else {
     Write-Host "Ollama is already running."
+    Add-NexusListeningProcess -Label "ollama" -Port 11434
+}
+
+$warmModel = "llama3.1:8b"
+$localPropertiesPath = Join-Path $backendRoot "local.properties"
+if (Test-Path -LiteralPath $localPropertiesPath) {
+    $configuredModelLine = Get-Content -LiteralPath $localPropertiesPath |
+        Where-Object { $_ -match '^ai\.general\.model=' } |
+        Select-Object -First 1
+    if ($configuredModelLine) {
+        $warmModel = ($configuredModelLine -split '=', 2)[1].Trim()
+    }
+}
+try {
+    Write-Host "Warming local model $warmModel for faster first response..."
+    $warmBody = @{
+        model = $warmModel
+        prompt = ""
+        stream = $false
+        keep_alive = "10m"
+        options = @{ num_predict = 1 }
+    } | ConvertTo-Json -Depth 4
+    Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/generate" -Method Post -ContentType "application/json" -Body $warmBody -TimeoutSec 180 | Out-Null
+    Write-Host "Local model is warm."
+}
+catch {
+    Write-Warning "Model warm-up was skipped: $($_.Exception.Message)"
 }
 
 if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:8001/health")) {
@@ -103,6 +178,7 @@ if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:8001/health")) {
 }
 else {
     Write-Host "RAG service is already running."
+    Add-NexusListeningProcess -Label "rag" -Port 8001
 }
 
 if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:8090/ai/health")) {
@@ -120,6 +196,7 @@ if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:8090/ai/health")) {
 }
 else {
     Write-Host "Agent Engine is already running."
+    Add-NexusListeningProcess -Label "backend" -Port 8090
 }
 
 if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:3000")) {
@@ -137,6 +214,7 @@ if (-not (Test-NexusEndpoint -Url "http://127.0.0.1:3000")) {
 }
 else {
     Write-Host "Frontend is already running."
+    Add-NexusListeningProcess -Label "frontend" -Port 3000
 }
 
 Save-NexusState

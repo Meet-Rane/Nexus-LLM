@@ -4,8 +4,6 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.util.Set;
-
 public class SignupRequest {
 
     @NotBlank
@@ -16,9 +14,6 @@ public class SignupRequest {
     @Size(max = 50)
     @Email
     private String email;
-
-    // Optional: pass role names e.g. ["admin", "user"]. Defaults to ROLE_USER if omitted.
-    private Set<String> role;
 
     @NotBlank
     @Size(min = 6, max = 40)
@@ -38,14 +33,6 @@ public class SignupRequest {
 
     public void setEmail(String email) {
         this.email = email;
-    }
-
-    public Set<String> getRole() {
-        return role;
-    }
-
-    public void setRole(Set<String> role) {
-        this.role = role;
     }
 
     public String getPassword() {

@@ -1,5 +1,5 @@
 import { Bot, Check, Download, UserRound } from "lucide-react";
-import { getArtifactDownloadUrl } from "../api/client";
+import { downloadArtifact } from "../api/client";
 import { Badge } from "./Ui";
 
 export function ChatMessage({ message }) {
@@ -30,15 +30,16 @@ export function ChatMessage({ message }) {
           )}
           <p className="whitespace-pre-wrap break-words">{message.text || "Waiting for the local agent…"}</p>
           {!isUser && artifacts.map((artifact) => (
-            <a
+            <button
+              type="button"
               key={`${artifact.conversationId || ""}:${artifact.path || artifact.id}`}
-              href={getArtifactDownloadUrl(artifact.path, artifact.conversationId)}
+              onClick={() => downloadArtifact(artifact.path, artifact.conversationId, artifact.fileName)}
               className="artifact-link"
             >
               <span className="icon-box icon-box-teal h-8 w-8"><Download size={15} /></span>
               <span><strong>{artifact.fileName}</strong><small>Generated locally · ready to download</small></span>
               <Check size={14} className="ml-auto text-teal" />
-            </a>
+            </button>
           ))}
         </div>
       </div>

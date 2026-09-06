@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
+  AlertTriangle,
   Bot,
   BrainCircuit,
   Check,
@@ -8,6 +9,7 @@ import {
   Code2,
   FileScan,
   LockKeyhole,
+  LoaderCircle,
   Network,
   ScanSearch,
   ShieldCheck,
@@ -46,6 +48,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(true);
   const [model, setModel] = useState("Auto route");
+  const [taskRun, setTaskRun] = useState(() => loadTaskRun(getConversationId()));
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -67,10 +70,15 @@ export default function Chat() {
     const reset = () => {
       setMessages([]);
       setModel("Auto route");
+      setTaskRun(emptyTaskRun());
     };
     window.addEventListener("nexus:new-conversation", reset);
     return () => window.removeEventListener("nexus:new-conversation", reset);
   }, []);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(taskRunKey(getConversationId()), JSON.stringify(taskRun));
+  }, [taskRun]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,11 +96,22 @@ export default function Chat() {
       { id: userId, role: "user", text },
       { id: assistantId, role: "assistant", text: "", trace: [] },
     ]);
+    setTaskRun({
+      phase: "routing",
+      startedAt: Date.now(),
+      finishedAt: null,
+      detail: "Understanding the request and applying local policy",
+      model: null,
+      modelReason: null,
+      activeTool: null,
+      completedTools: [],
+    });
     setLoading(true);
     try {
       const result = await streamMessage(text, {
         conversationId: getConversationId(),
         onEvent: (event) => {
+          setTaskRun((current) => applyTaskEvent(current, event));
           if (event.type === "ROUTER") {
             setModel(event.model || "Auto route");
             updateAssistant(assistantId, (message) => ({
@@ -160,7 +179,7 @@ export default function Chat() {
               </div>
               <div className="sticky bottom-0 bg-base/95 pt-2 pb-1"><ChatInput onSend={handleSend} loading={loading} compact /></div>
             </section>
-            <TaskRail loading={loading} model={model} />
+            <TaskRail run={taskRun} model={model} />
           </div>
         )}
       </div>
@@ -272,13 +291,26 @@ function Thinking() {
   return <div className="message"><div className="message-avatar message-avatar-agent"><Bot size={15} /></div><div><p className="mb-2 text-[11px] font-semibold text-white">Nexus Agent</p><div className="flex items-center gap-2 text-xs text-muted"><Sparkles size={14} className="animate-pulse-soft text-accent" /> Planning and selecting tools…</div></div></div>;
 }
 
-function TaskRail({ loading, model }) {
+function TaskRail({ run, model }) {
+  const [clock, setClock] = useState(run.startedAt || run.finishedAt || 0);
+  useEffect(() => {
+    if (!run.startedAt || run.finishedAt) return undefined;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [run.startedAt, run.finishedAt]);
+
+  const done = run.phase === "done";
+  const failed = run.phase === "error";
+  const routed = ["executing", "verifying", "done", "error"].includes(run.phase);
+  const executing = run.phase === "executing";
+  const verifying = run.phase === "verifying";
   const steps = [
-    { label: "Understand request", state: "done" },
-    { label: "Select model & tools", state: loading ? "active" : "done" },
-    { label: "Execute locally", state: loading ? "waiting" : "done" },
-    { label: "Verify output", state: loading ? "waiting" : "done" },
+    { label: "Understand request", state: run.phase === "idle" ? "waiting" : "done" },
+    { label: "Select model & tools", state: run.phase === "routing" ? "active" : routed ? "done" : "waiting" },
+    { label: run.activeTool ? `Execute ${friendlyTool(run.activeTool)}` : "Execute locally", state: executing ? "active" : (verifying || done) ? "done" : failed && routed ? "error" : "waiting" },
+    { label: "Verify output", state: verifying ? "active" : done ? "done" : failed ? "error" : "waiting" },
   ];
+  const elapsed = run.startedAt ? Math.max(0, Math.round(((run.finishedAt || clock) - run.startedAt) / 1000)) : 0;
   return (
     <aside className="hidden xl:block">
       <div className="panel sticky top-0 overflow-hidden">
@@ -286,14 +318,51 @@ function TaskRail({ loading, model }) {
         <div className="p-4">
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-faint">Plan</p>
           <div className="space-y-1">
-            {steps.map((step, index) => <div key={step.label} className="flex items-center gap-2.5 py-2"><span className={`step-dot step-${step.state}`}>{step.state === "done" ? <Check size={9} /> : index + 1}</span><span className={`text-[11px] ${step.state === "waiting" ? "text-faint" : "text-text"}`}>{step.label}</span></div>)}
+            {steps.map((step, index) => <div key={`${index}-${step.label}`} className="flex items-center gap-2.5 py-2"><span className={`step-dot step-${step.state}`}>{step.state === "done" ? <Check size={9} /> : step.state === "active" ? <LoaderCircle size={9} className="animate-spin" /> : step.state === "error" ? <AlertTriangle size={9} /> : index + 1}</span><span className={`text-[11px] ${step.state === "waiting" ? "text-faint" : step.state === "error" ? "text-danger" : "text-text"}`}>{step.label}</span></div>)}
           </div>
+          {run.detail && <div className={`mt-3 rounded-lg border p-3 text-[10px] leading-4 ${failed ? "border-danger/20 bg-danger/[.05] text-danger" : "border-line bg-base text-muted"}`}><p className="mb-1 font-semibold text-text">Latest activity</p>{run.detail}</div>}
+          {run.startedAt && <div className="mt-3 flex items-center justify-between font-mono text-[9px] text-faint"><span>{run.completedTools.length} local tool{run.completedTools.length === 1 ? "" : "s"}</span><span>{elapsed}s elapsed</span></div>}
           <div className="my-4 border-t border-line" />
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.12em] text-faint">Router decision</p>
-          <div className="rounded-lg border border-accent/15 bg-accent/[.05] p-3"><div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-accent"><BrainCircuit size={14} />{model}</div><p className="text-[10px] leading-4 text-muted">Selected for reasoning quality and task modality.</p></div>
+          <div className="rounded-lg border border-accent/15 bg-accent/[.05] p-3"><div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-accent"><BrainCircuit size={14} />{run.model || model}</div><p className="text-[10px] leading-4 text-muted">{run.modelReason || "Waiting for the local router decision."}</p></div>
           <div className="mt-4 flex items-center gap-2 text-[9.5px] text-teal"><LockKeyhole size={12} /> Local endpoint policy enforced</div>
         </div>
       </div>
     </aside>
   );
+}
+
+function emptyTaskRun() {
+  return { phase: "idle", startedAt: null, finishedAt: null, detail: null, model: null, modelReason: null, activeTool: null, completedTools: [] };
+}
+
+function applyTaskEvent(run, event) {
+  const current = run?.phase ? run : emptyTaskRun();
+  if (event.type === "ROUTER") return { ...current, phase: "executing", model: event.model, modelReason: event.detail, detail: "Model selected; generating the local execution plan" };
+  if (event.type === "TOOL_START") return { ...current, phase: "executing", activeTool: event.toolName, detail: event.detail || `Running ${friendlyTool(event.toolName)}` };
+  if (event.type === "TOOL_COMPLETE") return { ...current, phase: "verifying", activeTool: null, detail: event.detail || "Local tool completed; verifying its output", completedTools: [...new Set([...current.completedTools, event.toolName].filter(Boolean))] };
+  if (event.type === "ARTIFACT_CREATED") return { ...current, phase: "verifying", detail: event.detail || "Artifact created; checking delivery metadata" };
+  if (event.type === "TEXT") return { ...current, phase: "verifying", detail: current.completedTools.length ? "Preparing the verified result" : "Composing the local response" };
+  if (event.type === "DONE") return { ...current, phase: "done", finishedAt: Date.now(), activeTool: null, detail: "Execution completed and output verified" };
+  if (event.type === "ERROR") return { ...current, phase: "error", finishedAt: Date.now(), activeTool: null, detail: event.detail || "Execution failed" };
+  return current;
+}
+
+function friendlyTool(toolName) {
+  return (toolName || "tool").replaceAll("_", " ");
+}
+
+function taskRunKey(conversationId) {
+  return `nexus.taskRun.${conversationId}`;
+}
+
+function loadTaskRun(conversationId) {
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(taskRunKey(conversationId)) || "null");
+    if (!stored) return emptyTaskRun();
+    if (!stored.finishedAt && stored.startedAt) return { ...stored, phase: "error", finishedAt: Date.now(), detail: "The previous task was interrupted before completion" };
+    return stored;
+  } catch {
+    return emptyTaskRun();
+  }
 }
