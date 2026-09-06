@@ -1,15 +1,30 @@
 package com.localllm.sovereign_ai_workbench.Service;
 
+import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionRequest;
+import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionResult;
+import com.localllm.sovereign_ai_workbench.Tools.CodeExecutionTool;
 import com.localllm.sovereign_ai_workbench.Tools.CreateDocumentRequest;
 import com.localllm.sovereign_ai_workbench.Tools.CreateDocumentTool;
+import com.localllm.sovereign_ai_workbench.Tools.CreateFileRequest;
+import com.localllm.sovereign_ai_workbench.Tools.CreateFileTool;
 import com.localllm.sovereign_ai_workbench.Tools.KnowledgeSearchTool;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -62,5 +77,100 @@ class AgentServiceTests {
         assertTrue(prompt.contains("osha-lockout-tagout.pdf"));
         assertTrue(prompt.contains("retrieved on-premise evidence"));
         verify(knowledgeTool).searchKnowledgeBase(any(KnowledgeSearchTool.KnowledgeSearchRequest.class));
+    }
+
+    @Test
+    void routesNonDocumentExtensionAwayFromFormattedDocumentTool() {
+        CreateDocumentTool documentTool = mock(CreateDocumentTool.class);
+        CreateFileTool fileTool = mock(CreateFileTool.class);
+        when(fileTool.createFile(any(CreateFileRequest.class)))
+                .thenReturn("File 'loto_risk_register.csv' created successfully.");
+
+        AgentService service = new AgentService(
+                null, null, null, null, fileTool, null, null, null,
+                documentTool, null, null,
+                "ollama", "http://localhost:11434", "http://localhost:1234"
+        );
+
+        String response = """
+                {
+                  "name": "create_formatted_document",
+                  "arguments": {
+                    "path": "loto_risk_register.csv",
+                    "title": "LOTO Risk Register",
+                    "content": "activity,hazardous_energy,risk_level,loto_required\\nPump,Electrical,High,Yes"
+                  }
+                }
+                """;
+
+        String result = service.handleTextSimulatedToolCalls("test-conversation", response);
+
+        ArgumentCaptor<CreateFileRequest> requestCaptor = ArgumentCaptor.forClass(CreateFileRequest.class);
+        verify(fileTool).createFile(requestCaptor.capture());
+        assertEquals("loto_risk_register.csv", requestCaptor.getValue().getPath());
+        assertTrue(requestCaptor.getValue().getContent().startsWith("activity,"));
+        assertEquals("File 'loto_risk_register.csv' created successfully.", result);
+        verifyNoInteractions(documentTool);
+    }
+
+    @Test
+    void executesPythonInsteadOfOnlySavingItWhenExecutionWasRequested() {
+        CodeExecutionTool codeTool = mock(CodeExecutionTool.class);
+        CreateFileTool fileTool = mock(CreateFileTool.class);
+        when(codeTool.executePythonCode(any(CodeExecutionRequest.class)))
+                .thenReturn(new CodeExecutionResult(0, "Number of high-risk activities: 3\n", false,
+                        List.of("output/loto_risk_register.csv")));
+
+        AgentService service = new AgentService(
+                null, null, null, codeTool, fileTool, null, null, null,
+                null, null, null,
+                "ollama", "http://localhost:11434", "http://localhost:1234"
+        );
+
+        String response = """
+                {"name":"create_file","arguments":{"path":"loto_risk_register.py","content":"import pandas as pd\\nprint('done')"}}
+                """;
+        String result = service.handleTextSimulatedToolCalls(
+                "test-conversation",
+                response,
+                "Create and execute a Python script in the sandbox."
+        );
+
+        ArgumentCaptor<CodeExecutionRequest> requestCaptor = ArgumentCaptor.forClass(CodeExecutionRequest.class);
+        verify(codeTool).executePythonCode(requestCaptor.capture());
+        assertEquals("loto_risk_register.py", requestCaptor.getValue().getEntryFile());
+        assertTrue(requestCaptor.getValue().getFiles().containsKey("loto_risk_register.py"));
+        assertTrue(result.contains("exit code 0"));
+        assertTrue(result.contains("high-risk activities: 3"));
+        verifyNoInteractions(fileTool);
+    }
+
+    @Test
+    void replacesPersistedToolJsonWithReadableHistory() {
+        ChatMemory chatMemory = mock(ChatMemory.class);
+        String rawToolJson = """
+                ```json
+                {"name":"create_file","arguments":{"path":"loto_risk_register.py","content":"print('done')"}}
+                ```
+                """;
+        when(chatMemory.get("history-test")).thenReturn(List.of(
+                new UserMessage("Create a script\n\nMANDATORY EXECUTION REQUIREMENT:\nInternal routing instructions"),
+                new AssistantMessage(rawToolJson)
+        ));
+
+        AgentService service = new AgentService(
+                null, chatMemory, null, null, null, null, null, null,
+                null, null, null,
+                "ollama", "http://localhost:11434", "http://localhost:1234"
+        );
+
+        List<Message> history = service.getChatHistory("history-test");
+
+        assertEquals(2, history.size());
+        assertEquals("Create a script", history.get(0).getText());
+        assertTrue(history.get(1).getText().contains("loto_risk_register.py"));
+        assertFalse(history.get(1).getText().contains("\"arguments\""));
+        verify(chatMemory).clear("history-test");
+        verify(chatMemory).add(eq("history-test"), anyList());
     }
 }
