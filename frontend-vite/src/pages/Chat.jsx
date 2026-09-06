@@ -18,7 +18,7 @@ import { StatusBar } from "../components/StatusBar";
 import { ChatMessage } from "../components/ChatMessage";
 import { ChatInput } from "../components/ChatInput";
 import { Badge } from "../components/Ui";
-import { getChatHistory, getConversationId, pingAgent, streamMessage } from "../api/client";
+import { getChatHistory, getConversationId, listArtifacts, pingAgent, streamMessage } from "../api/client";
 
 const workflows = [
   {
@@ -52,17 +52,13 @@ export default function Chat() {
     pingAgent().then(() => setConnected(true)).catch(() => setConnected(false));
 
     const conversationId = getConversationId();
-    getChatHistory(conversationId)
-      .then((history) => {
+    Promise.all([
+      getChatHistory(conversationId),
+      listArtifacts(conversationId).catch(() => []),
+    ])
+      .then(([history, artifacts]) => {
         if (getConversationId() !== conversationId || !Array.isArray(history)) return;
-        setMessages(history
-          .filter((message) => message.messageType === "USER" || message.messageType === "ASSISTANT")
-          .map((message, index) => ({
-            id: `history-${message.metadata?.JdbcChatMemoryRepository_message_timestamp || index}`,
-            role: message.messageType === "USER" ? "user" : "assistant",
-            text: message.text || "",
-            trace: [],
-          })));
+        setMessages(restoreHistoryArtifacts(history, Array.isArray(artifacts) ? artifacts : []));
       })
       .catch(() => {});
   }, []);
@@ -115,7 +111,11 @@ export default function Chat() {
             }));
           }
           if (event.artifact) {
-            updateAssistant(assistantId, (message) => ({ ...message, artifact: event.artifact }));
+            updateAssistant(assistantId, (message) => ({
+              ...message,
+              artifact: event.artifact,
+              artifacts: appendArtifact(message.artifacts, event.artifact),
+            }));
           }
           if (event.type === "ERROR") {
             updateAssistant(assistantId, (message) => ({
@@ -132,6 +132,7 @@ export default function Chat() {
         text: message.text || result.text || "The agent completed without returning text.",
         model_used: message.model_used || result.model_used,
         artifact: message.artifact || result.artifact,
+        artifacts: result.artifact ? appendArtifact(message.artifacts, result.artifact) : message.artifacts,
       }));
     } catch (error) {
       setConnected(false);
@@ -165,6 +166,51 @@ export default function Chat() {
       </div>
     </div>
   );
+}
+
+function restoreHistoryArtifacts(history, artifacts) {
+  const restored = history
+    .filter((message) => message.messageType === "USER" || message.messageType === "ASSISTANT")
+    .map((message, index) => ({
+      id: `history-${message.metadata?.JdbcChatMemoryRepository_message_timestamp || index}`,
+      role: message.messageType === "USER" ? "user" : "assistant",
+      text: message.text || "",
+      trace: [],
+      timestamp: parseTimestamp(message.metadata?.JdbcChatMemoryRepository_message_timestamp),
+      artifacts: [],
+    }));
+
+  const assistantIndexes = restored
+    .map((message, index) => message.role === "assistant" ? index : -1)
+    .filter((index) => index >= 0);
+
+  [...artifacts]
+    .sort((left, right) => parseTimestamp(left.createdAt) - parseTimestamp(right.createdAt))
+    .forEach((artifact) => {
+      const createdAt = parseTimestamp(artifact.createdAt);
+      const targetIndex = assistantIndexes.find((index) => {
+        const assistantTime = restored[index].timestamp;
+        return Number.isFinite(createdAt) && Number.isFinite(assistantTime) && assistantTime >= createdAt - 2000;
+      }) ?? assistantIndexes.at(-1);
+
+      if (targetIndex !== undefined) {
+        restored[targetIndex].artifacts = appendArtifact(restored[targetIndex].artifacts, artifact);
+        restored[targetIndex].artifact = artifact;
+      }
+    });
+
+  return restored;
+}
+
+function appendArtifact(artifacts = [], artifact) {
+  if (!artifact) return artifacts;
+  const key = `${artifact.conversationId || ""}:${artifact.path || artifact.id}`;
+  return [...artifacts.filter((item) => `${item.conversationId || ""}:${item.path || item.id}` !== key), artifact];
+}
+
+function parseTimestamp(value) {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
 }
 
 function WorkbenchHome({ onPrompt, connected }) {

@@ -4,9 +4,9 @@ import { Badge } from "./Ui";
 
 export function ChatMessage({ message }) {
   const isUser = message.role === "user";
-  const downloadUrl = message.artifact
-    ? getArtifactDownloadUrl(message.artifact.path, message.artifact.conversationId)
-    : null;
+  const artifacts = message.artifacts?.length
+    ? message.artifacts
+    : message.artifact ? [message.artifact] : [];
   return (
     <article className={`message ${isUser ? "message-user" : ""}`}>
       <div className={`message-avatar ${isUser ? "message-avatar-user" : "message-avatar-agent"}`}>
@@ -29,13 +29,17 @@ export function ChatMessage({ message }) {
             </div>
           )}
           <p className="whitespace-pre-wrap break-words">{message.text || "Waiting for the local agent…"}</p>
-          {!isUser && downloadUrl && (
-            <a href={downloadUrl} className="artifact-link">
+          {!isUser && artifacts.map((artifact) => (
+            <a
+              key={`${artifact.conversationId || ""}:${artifact.path || artifact.id}`}
+              href={getArtifactDownloadUrl(artifact.path, artifact.conversationId)}
+              className="artifact-link"
+            >
               <span className="icon-box icon-box-teal h-8 w-8"><Download size={15} /></span>
-              <span><strong>{message.artifact.fileName}</strong><small>Generated locally · ready to download</small></span>
+              <span><strong>{artifact.fileName}</strong><small>Generated locally · ready to download</small></span>
               <Check size={14} className="ml-auto text-teal" />
             </a>
-          )}
+          ))}
         </div>
       </div>
     </article>
