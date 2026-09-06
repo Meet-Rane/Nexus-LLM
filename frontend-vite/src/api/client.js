@@ -40,4 +40,10 @@ export async function pingAgent() {
   return data;
 }
 
+/** Retrieve relevant chunks from the RAG service. */
+export async function retrieve(query, top_k = 5) {
+  const { data } = await ragClient.get("/retrieve", { params: { query, top_k } });
+  return data;
+}
+
 export default client;

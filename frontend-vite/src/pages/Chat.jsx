@@ -103,7 +103,7 @@ function WorkbenchHome({ onPrompt, connected }) {
       <section className="flex min-w-0 flex-col justify-center">
         <div className="mb-8 max-w-2xl">
           <div className="mb-5 flex items-center gap-2"><Badge tone="teal" dot>Air-gapped workspace</Badge><span className="text-[10px] text-muted">Nothing leaves this network</span></div>
-          <h2 className="font-display text-[clamp(28px,4vw,45px)] font-semibold leading-[1.08] tracking-[-0.04em] text-white">
+          <h2 className="font-display text-[clamp(28px,4vw,45px)] font-semibold leading-[1.08] tracking-[-0.04em] text-text">
             Industrial intelligence.<br /><span className="text-muted">Under your control.</span>
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-6 text-muted">Plan complex work, understand confidential documents, run code, and produce real deliverables with open-weight models hosted entirely on-premise.</p>
@@ -153,7 +153,7 @@ function StatusRow({ icon: Icon, label, value, ok }) {
 }
 
 function Thinking() {
-  return <div className="message"><div className="message-avatar message-avatar-agent"><Bot size={15} /></div><div><p className="mb-2 text-[11px] font-semibold text-white">Nexus Agent</p><div className="flex items-center gap-2 text-xs text-muted"><Sparkles size={14} className="animate-pulse-soft text-accent" /> Planning and selecting tools…</div></div></div>;
+  return <div className="message"><div className="message-avatar message-avatar-agent"><Bot size={15} /></div><div><p className="mb-2 text-[11px] font-semibold text-text">Nexus Agent</p><div className="flex items-center gap-2 text-xs text-muted"><Sparkles size={14} className="animate-pulse-soft text-accent" /> Planning and selecting tools…</div></div></div>;
 }
 
 function TaskRail({ loading, model }) {

@@ -2,6 +2,7 @@
 POST /ingest/file   — upload a document, OCR/extract, chunk, embed, store in ChromaDB
 POST /ingest/text   — ingest raw text directly (useful for pre-loading SOPs via curl)
 GET  /ingest/status — how many chunks are stored
+GET  /ingest/list   — list all ingested source document names
 """
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -66,6 +67,16 @@ def ingest_status():
         "total_chunks": collection.count(),
         "collection_name": collection.name,
     }
+
+
+@router.get("/list")
+def list_sources():
+    """Return all unique source document names ingested into ChromaDB."""
+    results = collection.get()
+    if not results["metadatas"]:
+        return {"sources": []}
+    sources = list(set(m["source"] for m in results["metadatas"]))
+    return {"sources": sources}
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
