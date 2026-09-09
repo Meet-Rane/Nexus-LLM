@@ -1,0 +1,129 @@
+{"path": "f_test_mathematical_steps.pdf", "content": "# F‑Test: Full Mathematical Steps
+
+## 1. Introduction
+The F‑test is used to compare two population variances (σ₁² and σ₂²). It is based on the ratio of two independent chi‑square distributed variables and follows an F‑distribution under the null hypothesis.
+
+## 2. Hypotheses
+- **Two‑tailed test**  
+  - \(H_0: \sigma_1^2 = \sigma_2^2\)  (the two variances are equal)  
+  - \(H_a: \sigma_1^2 \neq \sigma_2^2\)  (the variances are not equal)
+
+- **One‑tailed tests** (choose direction before data collection)  
+  - \(H_a: \sigma_1^2 > \sigma_2^2\) (variance 1 is larger)  
+  - \(H_a: \sigma_1^2 < \sigma_2^2\) (variance 1 is smaller)
+
+Significance level: \(\alpha\) (commonly 0.05).
+
+## 3. Test Statistic
+\[
+F = \frac{s_1^2}{s_2^2}
+\]
+
+where  
+- \(s_1^2\) and \(s_2^2\) are the sample variances.  
+- By convention, place the **larger variance in the numerator** so that \(F \ge 1\).  
+
+**Degrees of freedom**  
+\[
+df_1 = n_1 - 1 \quad \text{(numerator DOF)} \\
+df_2 = n_2 - 1 \quad \text{(denominator DOF)}
+\]
+
+The statistic follows an **F‑distribution**: \(F \sim F(df_1, df_2)\).
+
+## 4. Decision Rule (Critical‑Value Approach)
+1. Compute the critical value \(F_{\alpha, df_1, df_2}\) from the upper‑tail of the F‑distribution.  
+2. **Reject \(H_0\)** if \(F > F_{\alpha, df_1, df_2}\) (upper‑tail).  
+3. For a **two‑tailed test** at level \(\alpha\), split the alpha: use \(\alpha/2\) for both tails. Reject if  
+   \[
+   F > F_{\alpha/2, df_1, df_2} \quad \text{or} \quad F < F_{1-\alpha/2, df_1, df_2}
+   \]
+   where the lower‑tail critical value is the reciprocal of the upper‑tail value with swapped DOF:
+   \[
+   F_{1-\alpha/2, df_1, df_2} = \frac{1}{F_{\alpha/2, df_2, df_1}}
+   \]
+
+## 5. p‑Value Approach
+- Compute the cumulative distribution function (CDF) of the F‑distribution:
+  \[
+  p = 2\big[1 - F_{\text{CDF}}(F)\big] \quad \text{(two‑tailed)}
+  \]
+- For a one‑tailed test, use  
+  \[
+  p = 1 - F_{\text{CDF}}(F) \quad \text{(upper tail)} \quad \text{or} \quad p = F_{\text{CDF}}(F) \quad \text{(lower tail)}
+  \]
+- **Reject \(H_0\)** if \(p < \alpha\).
+
+## 6. Worked Example
+**Problem:** Compare the variance of batch‑A (n₁=12, s₁²=4.5 kg²) with batch‑B (n₂=15, s₂²=2.3 kg²) at \(\alpha = 0.05\).
+
+1. **Place larger variance in numerator**  
+   \[
+   s_1^2 = 4.5,\; s_2^2 = 2.3 \;\Rightarrow\; F = \frac{4.5}{2.3} = 1.9565 \approx 1.96
+   \]
+
+2. **Degrees of freedom**  
+   \[
+   df_1 = n_1 - 1 = 11,\quad df_2 = n_2 - 1 = 14
+   \]
+
+3. **Critical value (upper tail, α=0.05)**  
+   From F‑table: \(F_{0.05, 11, 14} \approx 3.01\).
+
+4. **Decision**  
+   Since \(F = 1.96 < 3.01\), we **fail to reject** \(H_0\). There is insufficient evidence that the variances differ.
+
+5. **p‑value** (using Python/`scipy.stats.f.cdf`):  
+   \[
+   p = 2\big[1 - F_{\text{CDF}}(1.96)\big] \approx 0.112
+   \]
+   Since \(p > 0.05\), the conclusion matches the critical‑value approach.
+
+## 7. Assumptions & Limitations
+- **Normality:** Populations must be normally distributed; the F‑test is highly sensitive to non‑normality. Consider Levene’s or Bartlett’s test as alternatives.  
+- **Independence:** Samples must be independent.  
+- **Scale:** Variances are meaningful only for continuous, ratio‑scale data.
+
+## 8. Python Implementation (scipy.stats)
+```python
+import numpy as np
+from scipy import stats
+
+# Sample data
+n1, s1_sq = 12, 4.5   # batch A
+n2, s2_sq = 15, 2.3   # batch B
+
+# Ensure larger variance in numerator
+if s1_sq < s2_sq:
+    s1_sq, s2_sq = s2_sq, s1_sq
+    n1, n2 = n2, n1
+
+F = s1_sq / s2_sq
+df1, df2 = n1 - 1, n2 - 1
+
+# Critical value (upper tail, α=0.05)
+alpha = 0.05
+F_crit = stats.f.ppf(1 - alpha, df1, df2)
+
+# p‑value (two‑tailed)
+p_val = 2 * (1 - stats.f.cdf(F, df1, df2))
+
+print(f"F = {F:.3f} (df={df1}, {df2})")
+print(f"Critical F ({alpha}, upper) = {F_crit:.3f}")
+print(f"Two‑tailed p‑value = {p_val:.4f}")
+
+# Decision
+if F > F_crit or p_val < alpha:
+    print("Reject H0: variances differ")
+else:
+    print("Fail to reject H0: variances are equal")
+```
+
+## 9. References
+- Montgomery, D.C., & Runger, G.C. (2011). *Applied Statistics and Probability for Engineers*, 6th ed., Wiley.
+- Snedecor, G.W., & Cochran, W.G. (1989). *Statistical Methods*, 8th ed., Iowa State University Press.
+
+---
+*End of document*"
+
+}
