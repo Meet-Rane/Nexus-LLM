@@ -76,11 +76,19 @@ public class CreateDocumentTool {
         String lowerPath = path.toLowerCase();
         if (lowerPath.endsWith(".doc")) {
             path = path.substring(0, path.length() - 4) + ".docx";
-            lowerPath = path.toLowerCase();
         }
         String cleanFileName = path.replaceAll("^[\\\\/]+", "").replace('\\', '/');
         if (cleanFileName.contains("/")) {
             cleanFileName = cleanFileName.substring(cleanFileName.lastIndexOf('/') + 1);
+        }
+        if (cleanFileName.isBlank()) {
+            cleanFileName = "document.pdf";
+        }
+        lowerPath = cleanFileName.toLowerCase();
+        if (!lowerPath.endsWith(".docx") && !lowerPath.endsWith(".xlsx")
+                && !lowerPath.endsWith(".pptx") && !lowerPath.endsWith(".pdf")) {
+            cleanFileName = cleanFileName + ".pdf";
+            lowerPath = cleanFileName.toLowerCase();
         }
 
         ConversationContextHolder.emitEvent(AgentStreamEvent.toolStart("create_formatted_document", "Generating document: " + cleanFileName));
@@ -94,13 +102,10 @@ public class CreateDocumentTool {
             } else if (lowerPath.endsWith(".pptx")) {
                 bytes = documentGenerationService.generatePptx(title, content);
             } else {
-                if (!lowerPath.endsWith(".pdf")) {
-                    path = path + ".pdf";
-                }
                 bytes = documentGenerationService.generatePdf(title, content);
             }
 
-            Artifact artifact = artifactService.saveFileBytes(conversationId, path, bytes);
+            Artifact artifact = artifactService.saveFileBytes(conversationId, cleanFileName, bytes);
             ArtifactDto dto = ArtifactDto.fromEntity(artifact);
 
             String resultMsg = "Document '" + artifact.getFileName() + "' generated successfully (" + artifact.getFileSize() + " bytes).";

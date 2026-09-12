@@ -1,25 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
-  AlertTriangle,
-  Bot,
-  BrainCircuit,
-  Check,
-  CircleDashed,
   Code2,
   FileScan,
   LockKeyhole,
-  LoaderCircle,
-  Network,
   ScanSearch,
-  ShieldCheck,
-  Sparkles,
-  Wrench,
 } from "lucide-react";
 import { StatusBar } from "../components/StatusBar";
 import { ChatMessage } from "../components/ChatMessage";
 import { ChatInput } from "../components/ChatInput";
-import { Badge } from "../components/Ui";
+import { ExecutionRail } from "../components/ExecutionRail";
 import { getChatHistory, getConversationId, listArtifacts, pingAgent, streamMessage } from "../api/client";
 
 const workflows = [
@@ -166,22 +156,23 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex h-full min-w-0 flex-col bg-base">
       <StatusBar connected={connected} model={model} title={messages.length ? "Active agent task" : "Agent workbench"} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {messages.length === 0 ? <WorkbenchHome onPrompt={handleSend} connected={connected} /> : (
-          <div className="mx-auto grid min-h-full max-w-[1220px] grid-cols-1 gap-5 px-5 py-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-            <section className="flex min-h-[calc(100vh-122px)] flex-col">
-              <div className="flex-1 space-y-6 pb-6">
+      <div className="flex min-h-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col">
+          {messages.length === 0 ? <WorkbenchHome onPrompt={handleSend} connected={connected} /> : <>
+            <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-7">
+              <div className="mx-auto flex max-w-[820px] flex-col py-6 sm:py-8">
                 {messages.map((message) => <ChatMessage key={message.id} message={message} />)}
-                {loading && <Thinking />}
                 <div ref={bottomRef} />
               </div>
-              <div className="sticky bottom-0 bg-base/95 pt-2 pb-1"><ChatInput onSend={handleSend} loading={loading} compact /></div>
-            </section>
-            <TaskRail run={taskRun} model={model} />
-          </div>
-        )}
+            </main>
+            <div className="shrink-0 border-t border-edge bg-base/90 px-4 pb-4 pt-3 backdrop-blur-xl sm:px-7 sm:pb-5">
+              <div className="mx-auto max-w-[820px]"><ChatInput onSend={handleSend} loading={loading} compact /><p className="mt-2 text-center text-[9px] text-ink3">Nexus can make mistakes. Verify engineering decisions before operational use.</p></div>
+            </div>
+          </>}
+        </section>
+        <ExecutionRail run={taskRun} model={model} connected={connected} />
       </div>
     </div>
   );
@@ -234,101 +225,28 @@ function parseTimestamp(value) {
 
 function WorkbenchHome({ onPrompt, connected }) {
   return (
-    <main className="mx-auto grid min-h-full w-full max-w-[1220px] grid-cols-1 gap-6 px-5 py-8 xl:grid-cols-[minmax(0,1fr)_280px] xl:py-12">
-      <section className="flex min-w-0 flex-col justify-center">
-        <div className="mb-8 max-w-2xl">
-          <div className="mb-5 flex items-center gap-2"><Badge tone="teal" dot>Local-only workspace</Badge><span className="text-[10px] text-muted">Loopback endpoints enforced</span></div>
-          <h2 className="font-display text-[clamp(28px,4vw,45px)] font-semibold leading-[1.08] tracking-[-0.04em] text-white">
-            Industrial intelligence.<br /><span className="text-muted">Under your control.</span>
-          </h2>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-muted">Plan complex work, understand confidential documents, run code, and produce real deliverables with open-weight models hosted entirely on-premise.</p>
-        </div>
-
-        <ChatInput onSend={onPrompt} loading={false} />
-
-        <div className="mt-5 grid grid-cols-1 gap-2.5 md:grid-cols-3">
+    <main className="relative min-h-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8">
+      <div className="nexus-grid pointer-events-none absolute inset-0 opacity-50" />
+      <div className="relative mx-auto flex min-h-full max-w-[920px] flex-col justify-center py-4">
+        <div className="mb-7 flex items-center gap-2 text-[10px] text-ink3"><span className="inline-flex items-center gap-1.5 rounded-full border border-ok/25 bg-ok/[.055] px-2.5 py-1 font-mono text-ok"><span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-ok" : "bg-danger"}`} />{connected ? "Air-gapped workspace" : "Local agent offline"}</span><span className="hidden sm:inline">Nothing leaves this network</span></div>
+        <h2 className="max-w-[720px] font-display text-[38px] font-semibold leading-[1.04] tracking-[-.035em] text-ink sm:text-[52px]">Industrial intelligence.<span className="block text-ink3">Under your control.</span></h2>
+        <p className="mt-6 max-w-[680px] text-[14px] leading-6 text-ink2 sm:text-[15px] sm:leading-7">Plan complex work, understand confidential documents, run code, and produce real deliverables with open-weight models hosted entirely on-premise.</p>
+        <div className="mt-8 max-w-[820px]"><ChatInput onSend={onPrompt} loading={false} /></div>
+        <div className="mt-5 grid max-w-[820px] grid-cols-1 gap-2.5 md:grid-cols-3">
           {workflows.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.title} onClick={() => onPrompt(item.prompt)} className="workflow-card">
-                <div className="icon-box icon-box-accent"><Icon size={16} /></div>
-                <div className="min-w-0 text-left"><p className="text-xs font-semibold text-text">{item.title}</p><p className="mt-1 text-[10.5px] leading-4 text-muted">{item.text}</p></div>
-                <ArrowRight size={14} className="ml-auto shrink-0 text-faint" />
+              <button key={item.title} onClick={() => onPrompt(item.prompt)} className="group flex min-h-[108px] items-start gap-3 rounded-xl border border-edge bg-surface/80 p-3.5 text-left transition hover:-translate-y-0.5 hover:border-amber/30 hover:bg-surface2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber/25 bg-amber/[.07] text-amber"><Icon size={16} /></span>
+                <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold text-ink">{item.title}</span><span className="mt-1 block text-[9px] leading-4 text-ink3">{item.text}</span></span>
+                <ArrowRight size={14} className="mt-1 shrink-0 text-ink3 transition group-hover:translate-x-0.5 group-hover:text-amber" />
               </button>
             );
           })}
         </div>
-      </section>
-
-      <aside className="space-y-4 xl:self-center">
-        <div className="panel overflow-hidden">
-          <div className="panel-header"><div><p className="eyebrow">System state</p><h3 className="panel-title mt-1">Sovereignty monitor</h3></div><ShieldCheck size={18} className="text-teal" /></div>
-          <div className="space-y-4 p-4">
-            <StatusRow icon={connected ? Network : CircleDashed} label="Local inference" value={connected ? "Connected" : "Standby"} ok={connected} />
-            <StatusRow icon={LockKeyhole} label="External egress" value="Policy blocked" ok />
-            <StatusRow icon={BrainCircuit} label="Model router" value="Automatic" ok />
-            <div className="rounded-lg border border-line bg-base px-3 py-2.5 font-mono text-[9px] leading-5 text-muted">
-              <div className="flex justify-between"><span>INSTANCE</span><span className="text-text">MRPL-WBX-01</span></div>
-              <div className="flex justify-between"><span>AGENT</span><span className={connected ? "text-teal" : "text-accent"}>{connected ? "ONLINE" : "OFFLINE"}</span></div>
-              <div className="flex justify-between"><span>AUDIT</span><span className="text-text">Security page</span></div>
-            </div>
-          </div>
-        </div>
-        <div className="panel p-4">
-          <div className="mb-3 flex items-center justify-between"><p className="eyebrow">Ready tools</p><Wrench size={14} className="text-muted" /></div>
-          <div className="flex flex-wrap gap-1.5">{["RAG", "File I/O", "Artifacts", "SSE"].map((tool) => <Badge key={tool}>{tool}</Badge>)}</div>
-        </div>
-      </aside>
-    </main>
-  );
-}
-
-function StatusRow({ icon: Icon, label, value, ok }) {
-  return <div className="flex items-center gap-3"><div className={`icon-box ${ok ? "icon-box-teal" : "icon-box-accent"}`}><Icon size={15} /></div><div className="min-w-0 flex-1"><p className="text-[11px] font-medium text-text">{label}</p><p className={`mt-0.5 text-[10px] ${ok ? "text-teal" : "text-accent"}`}>{value}</p></div>{ok && <Check size={13} className="text-teal" />}</div>;
-}
-
-function Thinking() {
-  return <div className="message"><div className="message-avatar message-avatar-agent"><Bot size={15} /></div><div><p className="mb-2 text-[11px] font-semibold text-white">Nexus Agent</p><div className="flex items-center gap-2 text-xs text-muted"><Sparkles size={14} className="animate-pulse-soft text-accent" /> Planning and selecting tools…</div></div></div>;
-}
-
-function TaskRail({ run, model }) {
-  const [clock, setClock] = useState(run.startedAt || run.finishedAt || 0);
-  useEffect(() => {
-    if (!run.startedAt || run.finishedAt) return undefined;
-    const timer = window.setInterval(() => setClock(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [run.startedAt, run.finishedAt]);
-
-  const done = run.phase === "done";
-  const failed = run.phase === "error";
-  const routed = ["executing", "verifying", "done", "error"].includes(run.phase);
-  const executing = run.phase === "executing";
-  const verifying = run.phase === "verifying";
-  const steps = [
-    { label: "Understand request", state: run.phase === "idle" ? "waiting" : "done" },
-    { label: "Select model & tools", state: run.phase === "routing" ? "active" : routed ? "done" : "waiting" },
-    { label: run.activeTool ? `Execute ${friendlyTool(run.activeTool)}` : "Execute locally", state: executing ? "active" : (verifying || done) ? "done" : failed && routed ? "error" : "waiting" },
-    { label: "Verify output", state: verifying ? "active" : done ? "done" : failed ? "error" : "waiting" },
-  ];
-  const elapsed = run.startedAt ? Math.max(0, Math.round(((run.finishedAt || clock) - run.startedAt) / 1000)) : 0;
-  return (
-    <aside className="hidden xl:block">
-      <div className="panel sticky top-0 overflow-hidden">
-        <div className="panel-header"><div><p className="eyebrow">Live trace</p><h3 className="panel-title mt-1">Agent execution</h3></div><Bot size={17} className="text-accent" /></div>
-        <div className="p-4">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-faint">Plan</p>
-          <div className="space-y-1">
-            {steps.map((step, index) => <div key={`${index}-${step.label}`} className="flex items-center gap-2.5 py-2"><span className={`step-dot step-${step.state}`}>{step.state === "done" ? <Check size={9} /> : step.state === "active" ? <LoaderCircle size={9} className="animate-spin" /> : step.state === "error" ? <AlertTriangle size={9} /> : index + 1}</span><span className={`text-[11px] ${step.state === "waiting" ? "text-faint" : step.state === "error" ? "text-danger" : "text-text"}`}>{step.label}</span></div>)}
-          </div>
-          {run.detail && <div className={`mt-3 rounded-lg border p-3 text-[10px] leading-4 ${failed ? "border-danger/20 bg-danger/[.05] text-danger" : "border-line bg-base text-muted"}`}><p className="mb-1 font-semibold text-text">Latest activity</p>{run.detail}</div>}
-          {run.startedAt && <div className="mt-3 flex items-center justify-between font-mono text-[9px] text-faint"><span>{run.completedTools.length} local tool{run.completedTools.length === 1 ? "" : "s"}</span><span>{elapsed}s elapsed</span></div>}
-          <div className="my-4 border-t border-line" />
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.12em] text-faint">Router decision</p>
-          <div className="rounded-lg border border-accent/15 bg-accent/[.05] p-3"><div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold text-accent"><BrainCircuit size={14} />{run.model || model}</div><p className="text-[10px] leading-4 text-muted">{run.modelReason || "Waiting for the local router decision."}</p></div>
-          <div className="mt-4 flex items-center gap-2 text-[9.5px] text-teal"><LockKeyhole size={12} /> Local endpoint policy enforced</div>
-        </div>
+        <div className="mt-5 flex max-w-[820px] items-center gap-2 text-[9px] text-ink3"><LockKeyhole size={11} className="text-ok" />OCR · Vision · RAG · Python · DOCX · XLSX · PPTX</div>
       </div>
-    </aside>
+    </main>
   );
 }
 

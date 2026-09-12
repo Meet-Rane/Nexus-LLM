@@ -7,13 +7,18 @@ __pycache__/
 
 # Node dependencies
 frontend/node_modules/
+frontend-vite/node_modules/
 
 # Build output
 frontend/dist/
 frontend/build/
+frontend-vite/dist/
 .m2-repository/
 ai-backend/sovereign-ai-workbench/storage/
 rag-service/.runtime/
+rag-service/chroma_db/
+outputs/
+.codex-worktrees/
 
 # Environment variables / secrets
 .env
