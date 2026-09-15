@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$GeneralModel = "llama3.1:8b",
-    [string]$CodingModel = "qwen2.5-coder:7b",
-    [string]$ReasoningModel = "qwen2.5-coder:7b",
+    [string]$CodingModel = "llama3.1:8b",
+    [string]$ReasoningModel = "llama3.1:8b",
     [string]$PythonExecutable = "C:\Program Files\Blender Foundation\Blender 5.0\5.0\python\bin\python.exe"
 )
 
@@ -13,6 +13,19 @@ $nexusRoot = $PSScriptRoot
 $ragRoot = Join-Path $nexusRoot "rag-service"
 $frontendRoot = Join-Path $nexusRoot "frontend-vite"
 $backendRoot = Join-Path $nexusRoot "ai-backend\sovereign-ai-workbench"
+
+$ollamaGpuSettings = [ordered]@{
+    OLLAMA_NUM_PARALLEL = "1"
+    OLLAMA_MAX_LOADED_MODELS = "1"
+    OLLAMA_FLASH_ATTENTION = "1"
+    OLLAMA_KV_CACHE_TYPE = "q8_0"
+    LLAMA_ARG_FIT_TARGET = "384"
+}
+foreach ($setting in $ollamaGpuSettings.GetEnumerator()) {
+    [Environment]::SetEnvironmentVariable($setting.Key, $setting.Value, "User")
+    Set-Item -Path "Env:$($setting.Key)" -Value $setting.Value
+}
+Write-Host "Configured Ollama for one-model full GPU offload (restart Ollama to apply)."
 
 foreach ($command in @("node.exe", "npm.cmd", "java.exe", "mvn.cmd", "ollama.exe")) {
     Get-Command $command -ErrorAction Stop | Out-Null

@@ -12,6 +12,15 @@ $runtimeRoot = Join-Path $backendRoot "storage\runtime"
 $statePath = Join-Path $runtimeRoot "nexus-processes.json"
 $startedProcesses = @()
 
+# This workstation uses one 8B model on a 6 GB NVIDIA GPU. A single request slot,
+# Flash Attention, and a quantized KV cache leave enough VRAM for every model
+# layer while retaining a small safety margin for the CUDA runtime.
+$env:OLLAMA_NUM_PARALLEL = "1"
+$env:OLLAMA_MAX_LOADED_MODELS = "1"
+$env:OLLAMA_FLASH_ATTENTION = "1"
+$env:OLLAMA_KV_CACHE_TYPE = "q8_0"
+$env:LLAMA_ARG_FIT_TARGET = "384"
+
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $ragRoot ".runtime\chroma") | Out-Null
 
