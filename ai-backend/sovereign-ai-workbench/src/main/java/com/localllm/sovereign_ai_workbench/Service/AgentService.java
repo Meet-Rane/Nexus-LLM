@@ -14,6 +14,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -71,7 +72,21 @@ public class AgentService {
                - FOR QUESTIONS ABOUT INTERNAL MANUALS, SOPS, OR UPLOADED REPORTS: Call 'search_knowledge_base' before answering and cite the returned source filenames.
             """;
 
+    private static final String FAST_DOCUMENT_SYSTEM_PROMPT = """
+            You are NEXUS, a sovereign on-premise industrial document assistant.
+            Use only the supplied local evidence. Return only the finished document body as Markdown;
+            the application creates the native Office file after your response.
+            Preserve the requested simple filename and include every heading requested by the user.
+            Keep the document concise: no more than 180 words unless the user explicitly asks for detail.
+            Include exact source filenames, engineering units, essential calculations, safety risks,
+            and an actionable management recommendation. Never create Python code for Office files.
+            Do not expose internal paths or return JSON/tool-call syntax.
+            """;
+
+    private static final int MAX_DOCUMENT_EVIDENCE_CHARS = 2500;
+
     private final ChatClient chatClient;
+    private final ChatClient directChatClient;
     private final ChatMemory chatMemory;
     private final ModelRouter modelRouter;
     private final CodeExecutionTool codeExecutionTool;
@@ -87,6 +102,8 @@ public class AgentService {
     private final String externalAiBaseUrl;
     @Value("${ai.ollama.num-predict:1600}")
     private int ollamaNumPredict = 1600;
+    @Value("${ai.ollama.document-num-predict:360}")
+    private int ollamaDocumentNumPredict = 360;
     @Value("${ai.ollama.num-ctx:4096}")
     private int ollamaNumCtx = 4096;
     @Value("${ai.ollama.keep-alive:10m}")
@@ -96,6 +113,7 @@ public class AgentService {
 
     public AgentService(
             @Qualifier("chatClient") ChatClient chatClient,
+            @Qualifier("routerClient") ChatClient directChatClient,
             ChatMemory chatMemory,
             ModelRouter modelRouter,
             CodeExecutionTool codeExecutionTool,
@@ -111,6 +129,7 @@ public class AgentService {
             @Value("${spring.ai.openai.base-url}") String externalAiBaseUrl
     ) {
         this.chatClient = chatClient;
+        this.directChatClient = directChatClient;
         this.chatMemory = chatMemory;
         this.modelRouter = modelRouter;
         this.codeExecutionTool = codeExecutionTool;
@@ -140,11 +159,15 @@ public class AgentService {
             recordModelRequest(selectedModel);
             String effectiveMessage = enforceExecutionTool(message, enrichKnowledgeBackedDeliverable(message));
 
+            if ("DOCUMENT_APPROVAL".equals(decision.category())) {
+                return generateFormattedDocumentFast(conversationId, message, effectiveMessage, selectedModel, decision.category());
+            }
+
             System.out.println("Provider: " + provider);
             System.out.println("Selected model: " + selectedModel + " (" + decision.category() + ")");
 
             ChatClient.ChatClientRequestSpec request = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPromptFor(decision.category()))
                     .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
                     .user(effectiveMessage);
             request = configureTools(request, message);
@@ -188,8 +211,17 @@ public class AgentService {
                 sink.next(AgentStreamEvent.router(selectedModel, decision.reason()));
                 String effectiveMessage = enforceExecutionTool(message, enrichKnowledgeBackedDeliverable(message));
 
+                if ("DOCUMENT_APPROVAL".equals(decision.category())) {
+                    String responseText = generateFormattedDocumentFast(
+                            conversationId, message, effectiveMessage, selectedModel, decision.category());
+                    emitTextChunks(sink, responseText);
+                    sink.next(AgentStreamEvent.done());
+                    sink.complete();
+                    return;
+                }
+
                 ChatClient.ChatClientRequestSpec request = chatClient.prompt()
-                        .system(SYSTEM_PROMPT)
+                        .system(systemPromptFor(decision.category()))
                         .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, conversationId))
                         .user(effectiveMessage);
                 request = configureTools(request, message);
@@ -211,13 +243,7 @@ public class AgentService {
                 replaceLastAssistantResponse(conversationId, rawResponseText, responseText);
 
                 // Stream response text chunks smoothly to the UI
-                if (responseText != null && !responseText.isBlank()) {
-                    int chunkSize = 25;
-                    for (int i = 0; i < responseText.length(); i += chunkSize) {
-                        int end = Math.min(i + chunkSize, responseText.length());
-                        sink.next(AgentStreamEvent.text(responseText.substring(i, end)));
-                    }
-                }
+                emitTextChunks(sink, responseText);
 
                 sink.next(AgentStreamEvent.done());
                 sink.complete();
@@ -718,7 +744,7 @@ public class AgentService {
         }
 
         String knowledge = knowledgeSearchTool.searchKnowledgeBase(
-                new KnowledgeSearchTool.KnowledgeSearchRequest(message, 3)
+                new KnowledgeSearchTool.KnowledgeSearchRequest(message, 2)
         );
         if (knowledge.startsWith("Knowledge base search failed:")
                 || knowledge.startsWith("No relevant passages")) {
@@ -731,7 +757,73 @@ public class AgentService {
                 Use the following retrieved on-premise evidence as the factual basis for the document.
                 Preserve its real source filename in the Source section:
 
-                """ + knowledge;
+                """ + compactDocumentEvidence(knowledge);
+    }
+
+    private String generateFormattedDocumentFast(
+            String conversationId,
+            String originalMessage,
+            String evidenceBackedMessage,
+            String selectedModel,
+            String category) {
+        String generationPrompt = evidenceBackedMessage + """
+
+
+                FAST DOCUMENT OUTPUT:
+                Return only the finished document body as concise Markdown, never JSON and never a tool call.
+                Use all headings requested by the user. Keep the total body at or below 180 words.
+                For Excel, include a Markdown table with all requested rows. For PowerPoint, use one ## heading per slide.
+                """;
+
+        String generatedContent = directChatClient.prompt()
+                .system(FAST_DOCUMENT_SYSTEM_PROMPT)
+                .user(generationPrompt)
+                .options(buildOllamaOptions(selectedModel, category))
+                .call()
+                .content();
+
+        if (generatedContent == null || generatedContent.isBlank()) {
+            throw new IllegalStateException("The local model returned an empty document body.");
+        }
+
+        String documentContent = ensureKnowledgeCitations(generatedContent);
+        String path = requestedDocumentFileName(originalMessage);
+        String toolResult = createDocumentTool.createFormattedDocument(
+                new CreateDocumentRequest(path, null, documentContent)
+        );
+        String responseText = ensureKnowledgeCitations(toolResult);
+
+        chatMemory.add(conversationId, new UserMessage(originalMessage));
+        chatMemory.add(conversationId, new AssistantMessage(responseText));
+        return responseText;
+    }
+
+    private static String requestedDocumentFileName(String message) {
+        Matcher matcher = Pattern.compile(
+                "(?i)([a-z0-9][a-z0-9._-]{0,119}\\.(?:docx|xlsx|pptx|pdf))")
+                .matcher(message == null ? "" : message);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        String lower = message == null ? "" : message.toLowerCase();
+        if (lower.contains("excel") || lower.contains("spreadsheet")) return "nexus_workbook.xlsx";
+        if (lower.contains("powerpoint") || lower.contains("presentation")) return "nexus_presentation.pptx";
+        if (lower.contains("pdf")) return "nexus_document.pdf";
+        return "nexus_document.docx";
+    }
+
+    private static void emitTextChunks(
+            reactor.core.publisher.FluxSink<AgentStreamEvent> sink,
+            String responseText) {
+        if (responseText == null || responseText.isBlank()) {
+            return;
+        }
+        int chunkSize = 25;
+        for (int i = 0; i < responseText.length(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, responseText.length());
+            sink.next(AgentStreamEvent.text(responseText.substring(i, end)));
+        }
     }
 
     private void recordModelRequest(String selectedModel) {
@@ -740,9 +832,14 @@ public class AgentService {
     }
 
     private OllamaChatOptions.Builder buildOllamaOptions(String selectedModel, String category) {
-        int responseTokenLimit = "CALCULATION_REASONING".equals(category)
-                ? Math.min(ollamaNumPredict, 600)
-                : ollamaNumPredict;
+        int responseTokenLimit;
+        if ("DOCUMENT_APPROVAL".equals(category)) {
+            responseTokenLimit = Math.min(ollamaNumPredict, ollamaDocumentNumPredict);
+        } else if ("CALCULATION_REASONING".equals(category)) {
+            responseTokenLimit = Math.min(ollamaNumPredict, 600);
+        } else {
+            responseTokenLimit = ollamaNumPredict;
+        }
         OllamaChatOptions.Builder builder = OllamaChatOptions.builder();
         builder.model(selectedModel)
                 .temperature(ollamaTemperature)
@@ -750,6 +847,19 @@ public class AgentService {
                 .numCtx(ollamaNumCtx)
                 .keepAlive(ollamaKeepAlive);
         return builder;
+    }
+
+    private static String systemPromptFor(String category) {
+        return "DOCUMENT_APPROVAL".equals(category) ? FAST_DOCUMENT_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    }
+
+    private static String compactDocumentEvidence(String knowledge) {
+        if (knowledge == null || knowledge.length() <= MAX_DOCUMENT_EVIDENCE_CHARS) {
+            return knowledge;
+        }
+        return knowledge.substring(0, MAX_DOCUMENT_EVIDENCE_CHARS)
+                .stripTrailing()
+                + "\n[Additional retrieved text omitted to keep local inference within the latency budget.]";
     }
 
     private String ensureKnowledgeCitations(String responseText) {

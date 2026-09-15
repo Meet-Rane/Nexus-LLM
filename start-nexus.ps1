@@ -139,6 +139,7 @@ else {
 }
 
 $warmModel = "llama3.1:8b"
+$warmNumCtx = 2048
 $localPropertiesPath = Join-Path $backendRoot "local.properties"
 if (Test-Path -LiteralPath $localPropertiesPath) {
     $configuredModelLine = Get-Content -LiteralPath $localPropertiesPath |
@@ -146,6 +147,12 @@ if (Test-Path -LiteralPath $localPropertiesPath) {
         Select-Object -First 1
     if ($configuredModelLine) {
         $warmModel = ($configuredModelLine -split '=', 2)[1].Trim()
+    }
+    $configuredContextLine = Get-Content -LiteralPath $localPropertiesPath |
+        Where-Object { $_ -match '^ai\.ollama\.num-ctx=' } |
+        Select-Object -First 1
+    if ($configuredContextLine) {
+        $warmNumCtx = [int](($configuredContextLine -split '=', 2)[1].Trim())
     }
 }
 try {
@@ -155,7 +162,7 @@ try {
         prompt = ""
         stream = $false
         keep_alive = "10m"
-        options = @{ num_predict = 1 }
+        options = @{ num_predict = 1; num_ctx = $warmNumCtx }
     } | ConvertTo-Json -Depth 4
     Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/generate" -Method Post -ContentType "application/json" -Body $warmBody -TimeoutSec 180 | Out-Null
     Write-Host "Local model is warm."

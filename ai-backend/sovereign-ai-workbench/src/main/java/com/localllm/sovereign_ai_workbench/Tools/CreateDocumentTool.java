@@ -24,6 +24,7 @@ public class CreateDocumentTool {
 
     @Tool(
         name = "create_formatted_document",
+        returnDirect = true,
         description = """
             Create a professionally formatted native PDF, Word, Excel, or PowerPoint deliverable from structured text.
 

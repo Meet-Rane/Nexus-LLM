@@ -7,6 +7,7 @@ import com.localllm.sovereign_ai_workbench.Service.DocumentGenerationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.ai.tool.annotation.Tool;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,5 +47,15 @@ class CreateDocumentToolTests {
         verify(artifactService).saveFileBytes(eq("test-conversation"), path.capture(), eq(content));
         assertThat(path.getValue()).isEqualTo("refinery_summary_2022_2025.docx");
         assertThat(result).contains("generated successfully");
+    }
+
+    @Test
+    void returnsGeneratedDocumentDirectlyWithoutASecondModelRoundTrip() throws Exception {
+        Tool annotation = CreateDocumentTool.class
+                .getMethod("createFormattedDocument", CreateDocumentRequest.class)
+                .getAnnotation(Tool.class);
+
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.returnDirect()).isTrue();
     }
 }

@@ -20,11 +20,14 @@ public class ChatConfig {
     @Value("${ai.provider}")
     private String provider;
 
+    @Value("${ai.chat.memory.max-messages:4}")
+    private int maxMemoryMessages;
+
     @Bean
     public ChatMemory chatMemory(ChatMemoryRepository chatMemoryRepository){
         return MessageWindowChatMemory.builder()
                     .chatMemoryRepository(chatMemoryRepository)
-                    .maxMessages(12)
+                    .maxMessages(Math.max(2, maxMemoryMessages))
                     .build();
     }
 

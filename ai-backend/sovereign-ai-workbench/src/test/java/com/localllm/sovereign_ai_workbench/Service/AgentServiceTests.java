@@ -37,7 +37,7 @@ class AgentServiceTests {
                 .thenReturn("Document 'loto_approval_note.docx' generated successfully.");
 
         AgentService service = new AgentService(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 documentTool, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -65,7 +65,7 @@ class AgentServiceTests {
                 .thenReturn("Local knowledge base results:\nSource: osha-lockout-tagout.pdf\nLOTO evidence");
 
         AgentService service = new AgentService(
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 null, knowledgeTool, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -76,7 +76,10 @@ class AgentServiceTests {
 
         assertTrue(prompt.contains("osha-lockout-tagout.pdf"));
         assertTrue(prompt.contains("retrieved on-premise evidence"));
-        verify(knowledgeTool).searchKnowledgeBase(any(KnowledgeSearchTool.KnowledgeSearchRequest.class));
+        ArgumentCaptor<KnowledgeSearchTool.KnowledgeSearchRequest> requestCaptor =
+                ArgumentCaptor.forClass(KnowledgeSearchTool.KnowledgeSearchRequest.class);
+        verify(knowledgeTool).searchKnowledgeBase(requestCaptor.capture());
+        assertEquals(2, requestCaptor.getValue().topK());
     }
 
     @Test
@@ -87,7 +90,7 @@ class AgentServiceTests {
                 .thenReturn("File 'loto_risk_register.csv' created successfully.");
 
         AgentService service = new AgentService(
-                null, null, null, null, fileTool, null, null, null,
+                null, null, null, null, null, fileTool, null, null, null,
                 documentTool, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -122,7 +125,7 @@ class AgentServiceTests {
                         List.of("output/loto_risk_register.csv")));
 
         AgentService service = new AgentService(
-                null, null, null, codeTool, fileTool, null, null, null,
+                null, null, null, null, codeTool, fileTool, null, null, null,
                 null, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -159,7 +162,7 @@ class AgentServiceTests {
         ));
 
         AgentService service = new AgentService(
-                null, chatMemory, null, null, null, null, null, null,
+                null, null, chatMemory, null, null, null, null, null, null,
                 null, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -182,7 +185,7 @@ class AgentServiceTests {
                         List.of("output/demo_verification.json")));
 
         AgentService service = new AgentService(
-                null, null, null, codeTool, null, null, null, null,
+                null, null, null, null, codeTool, null, null, null, null,
                 null, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
@@ -208,7 +211,7 @@ class AgentServiceTests {
                 .thenReturn(new CodeExecutionResult(0, "SANDBOX_TEST_PASSED\n", false, List.of()));
 
         AgentService service = new AgentService(
-                null, null, null, codeTool, null, null, null, null,
+                null, null, null, null, codeTool, null, null, null, null,
                 null, null, null,
                 "ollama", "http://localhost:11434", "http://localhost:1234"
         );
